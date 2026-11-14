@@ -3033,7 +3033,11 @@ if st.session_state.get("nav") not in pages:
 
 # ---------------------------------------------------------------- sidebar
 with st.sidebar:
-    st.sidebar.image("pjc_logo.jpg", width=120)
+    # Create 3 columns in the sidebar to center the logo
+col1, col2, col3 = st.sidebar.columns([1, 2, 1])
+with col2:
+    st.image("pjc_logo.jpg", width=120)
+    
     st.radio("🌐 Language / ভাষা", list(LANGS), key="lang", format_func=LANGS.get, horizontal=True)
     st.markdown(tr("## 🎓 Portal"))
     if user is None:
