@@ -292,3 +292,40 @@ def main():
 
 if __name__ == "__main__":
     main()
+# ==========================================
+# 0. CUSTOM NEON & 3D STYLING & LOGO
+# ==========================================
+st.set_page_config(
+    page_title="Academic Assessment Portal",
+    page_icon="🎓",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS for glowing cards, neon headers, and 3D UI aesthetics
+st.markdown("""
+<style>
+    .stApp {
+        background-color: #0e0b16;
+        color: #ffffff;
+    }
+    div.stButton > button {
+        background: linear-gradient(90deg, #6366f1 0%, #a855f7 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-weight: bold;
+    }
+    div.stButton > button:hover {
+        background: linear-gradient(90deg, #4f46e5 0%, #9333ea 100%);
+        color: #ffffff;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+with st.sidebar:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if os.path.exists("pjc_logo.jpg"):
+            st.image("pjc_logo.jpg", width=120)
+    st.title("Portal")
