@@ -729,9 +729,10 @@ class SupabaseBackend:
     def __init__(self, url, key):
         self.url = url.rstrip("/")
         self.s = requests.Session()
-        self.s.headers.update({"apikey": key})
-        if not key.startswith("sb_"):          # legacy JWT keys also go in the Authorization header
-            self.s.headers["Authorization"] = f"Bearer {key}"
+        self.s.headers.update({
+            "apikey": key,
+            "Authorization": f"Bearer {key}"
+        })
 
     def _req(self, method, path, ok=(), **kw):
         try:
