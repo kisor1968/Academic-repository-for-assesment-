@@ -1727,12 +1727,12 @@ def apply_theme():
     st.markdown(NEON_CSS, unsafe_allow_html=True)
     st.markdown(EXTRA_CSS, unsafe_allow_html=True)
     
-    # Set typed text color to white for text inputs and textareas
+    # Set font color to black for text input boxes that have a white/light background
     st.markdown("""
     <style>
-    .stTextInput input, .stNumberInput input, .stTextArea textarea, [data-baseweb="base-input"] input {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
+    .stTextInput input, .stNumberInput input, [data-baseweb="base-input"] input {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
     }
     </style>
     """, unsafe_allow_html=True)
