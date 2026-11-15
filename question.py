@@ -1727,12 +1727,19 @@ def apply_theme():
     st.markdown(NEON_CSS, unsafe_allow_html=True)
     st.markdown(EXTRA_CSS, unsafe_allow_html=True)
     
-    # Set font color to black for text input boxes that have a white/light background
+    # Login inputs = Black font, Review/Dark inputs = White font
     st.markdown("""
     <style>
+    /* Default text inputs (Login) get black font */
     .stTextInput input, .stNumberInput input, [data-baseweb="base-input"] input {
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
+    }
+    
+    /* Text inputs and textareas inside forms or dark containers (like Review Name & Review Box) get white font */
+    form .stTextInput input, form .stTextArea textarea {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
     }
     </style>
     """, unsafe_allow_html=True)
