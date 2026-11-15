@@ -1045,7 +1045,29 @@ def doc_get(key, default=None):
 def doc_put(key, data):
     backend().put(key, data)
 
+# ======================================================================
+# REVIEWS & GUIDE DATA (Single-file adapted)
+# ======================================================================
+K_REVIEWS = "reviews/"
 
+def list_reviews():
+    return [(k, d) for k, d in backend().docs(K_REVIEWS)]
+
+def add_review(name, role, dept, rating, comment):
+    with _LOCK:
+        seq = max([int(k.rsplit("-", 1)[-1]) for k in backend().keys(K_REVIEWS)], default=0) + 1
+        key = f"{K_REVIEWS}REV-{seq:04d}"
+        doc = {
+            "name": name.strip(), "role": role, "dept": dept,
+            "rating": int(rating), "comment": comment.strip(),
+            "created": now_str()
+        }
+        backend().put(key, doc)
+        return key
+
+def delete_review(key):
+    with _LOCK:
+        backend().delete(key)
 # ====================================================================== department store
 class DeptStore:
     """Questions, submissions, uploads and report cards of ONE department."""
