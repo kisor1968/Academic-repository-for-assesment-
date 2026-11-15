@@ -80,6 +80,11 @@ MATERIAL_CATEGORIES = {
     "reference": "Reference Books & Other",
 }
 MATERIAL_EXTS = ["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "png", "jpg", "jpeg", "zip"]
+MATERIAL_TYPES = ["Question Paper", "Book", "Lecture Notes", "Syllabus", "Assignment", "Question Bank", "Reference Material", "Other"]
+UG_PG_LEVELS = ["UG", "PG", "Other / Not applicable"]
+CCF_CBCS_OPTIONS = ["CCF", "CBCS", "Other / Not applicable"]
+COURSE_STRUCTURES = ["Major", "Minor", "MDC", "SEC", "AEC", "VAC", "Core", "Elective", "Honours", "General", "Programme", "Other / Not applicable"]
+MATERIAL_YEARS = [str(y) for y in range(datetime.now().year + 1, 1999, -1)]
 MAX_MATERIAL_MB = 25
 # Tests, timing, student login, backups
 TIMEZONE = "Asia/Kolkata"                         # all dates/times are shown and compared in this zone
@@ -1215,7 +1220,7 @@ class DeptStore:
             m = self.get_material(mid)
             if m is None:
                 return None
-            m.update({k: v for k, v in updates.items() if k in ("title", "subject", "semester", "description")})
+            m.update({k: v for k, v in updates.items() if k in ("title", "subject", "semester", "description", "year", "ug_pg", "ccf_cbcs", "course_structure", "material_type")})
             self.b.put(self._mprefix + mid, m)
             return m
 
@@ -3291,82 +3296,156 @@ def _material_bytes(dept, mid, stamp):
     return DeptStore(dept).read_material(mid)
 
 
-# ------------------------------------------------------------------ students (and everyone): browse + download
+# ------------------------------------------------------------------ students (and everyone): browse + preview + download
+def _preview_material(filename, data):
+    """Render a safe in-app preview where the browser/app supports the file format."""
+    ext = Path(filename).suffix.lower()
+    if ext == ".pdf":
+        import base64
+        encoded = base64.b64encode(data).decode("ascii")
+        components.html(
+            f'<iframe title="Document preview" src="data:application/pdf;base64,{encoded}" '
+            'width="100%" height="650" style="border:1px solid #aaa;border-radius:8px"></iframe>',
+            height=665, scrolling=True,
+        )
+        return True
+    if ext in (".png", ".jpg", ".jpeg"):
+        st.image(data, caption=filename, use_container_width=True)
+        return True
+    if ext in (".txt",):
+        st.text(data.decode("utf-8", errors="replace")[:30000])
+        return True
+    if ext == ".docx":
+        try:
+            import zipfile
+            import xml.etree.ElementTree as ET
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                root = ET.fromstring(archive.read("word/document.xml"))
+            ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+            paragraphs = []
+            for paragraph in root.findall(".//w:p", ns):
+                line = "".join(node.text or "" for node in paragraph.findall(".//w:t", ns))
+                if line.strip(): paragraphs.append(line)
+            st.text("\n\n".join(paragraphs)[:30000] or "No readable text found in this document.")
+            return True
+        except Exception:
+            st.info(tr("A text preview is not available for this file. Please download it to view."))
+            return False
+    if ext in (".doc", ".ppt", ".pptx", ".xls", ".xlsx", ".zip"):
+        st.info(tr("Preview is not available for this file type in the browser. You can download it to open in the appropriate application."))
+        return False
+    st.info(tr("Preview is not available for this file type. You can download it instead."))
+    return False
+
+
 def render_study_materials(store):
     banner(tr("📚 Study Materials & Syllabus"),
-           trf("Department of {0} — pick a folder, choose a material and download", store.dept))
-    mats = store.materials()
-    if not mats:
-        st.info(tr("No study materials have been uploaded for this department yet. Please check back later."))
-        return
+           tr("Search question papers, books, syllabus, notes and other learning materials"))
 
-    c1, c2, c3 = st.columns([2, 1.4, 2])
-    cat = c1.selectbox(tr("Folder"), ["all"] + list(MATERIAL_CATEGORIES), key=f"mat_cat_{lang()}",
-                       format_func=lambda c: tr("All folders") if c == "all" else "📁 " + _cat_label(c))
-    sem = c2.selectbox(tr("Semester"), ["all"] + SEMESTERS, key=f"mat_sem_{lang()}",
-                       format_func=lambda c: tr("All semesters") if c == "all" else _sem_label(c))
-    q = c3.text_input(tr("Search title or subject"), key="mat_q").strip().lower()
+    # Materials are public learning resources; search across departments, not only the active one.
+    mats = []
+    for department in DEPARTMENTS:
+        try:
+            for item in DeptStore(department).materials():
+                mats.append({**item, "_department": department})
+        except StorageError:
+            continue
 
-    shown = [m for m in mats
-             if (cat == "all" or m["category"] == cat) and (sem == "all" or m["semester"] == sem)
-             and (not q or q in m["title"].lower() or q in m.get("subject", "").lower())]
+    st.markdown("### " + tr("Search & Filter Materials"))
+    f1, f2, f3 = st.columns(3)
+    dept_options = ["All"] + DEPARTMENTS
+    department = f1.selectbox(tr("Department"), dept_options, key="mat_search_dept")
+    semester = f2.selectbox(tr("Semester"), ["All"] + SEMESTERS, key="mat_search_sem",
+                            format_func=lambda x: tr("All") if x == "All" else _sem_label(x))
+    year = f3.selectbox(tr("Year of Examination / Publication"), ["All"] + MATERIAL_YEARS, key="mat_search_year")
+    f4, f5, f6, f7 = st.columns(4)
+    ugpg = f4.selectbox(tr("UG / PG"), ["All"] + UG_PG_LEVELS, key="mat_search_level")
+    ccf = f5.selectbox(tr("CCF / CBCS"), ["All"] + CCF_CBCS_OPTIONS, key="mat_search_framework")
+    structure = f6.selectbox(tr("Course Structure"), ["All"] + COURSE_STRUCTURES, key="mat_search_structure")
+    mtype = f7.selectbox(tr("Material Type"), ["All"] + MATERIAL_TYPES, key="mat_search_type")
+    keyword = st.text_input(tr("Keyword Search"), placeholder=tr("Paper code, title, subject or text…"), key="mat_search_keyword").strip().casefold()
+
+    shown = []
+    for m in mats:
+        haystack = " ".join([m.get("title", ""), m.get("subject", ""), m.get("description", ""),
+                             m.get("filename", ""), m.get("material_type", "")]).casefold()
+        if department != "All" and m["_department"] != department: continue
+        if semester != "All" and m.get("semester", "General") != semester: continue
+        if year != "All" and str(m.get("year", "")) != year: continue
+        if ugpg != "All" and m.get("ug_pg", "Other / Not applicable") != ugpg: continue
+        if ccf != "All" and m.get("ccf_cbcs", "Other / Not applicable") != ccf: continue
+        if structure != "All" and m.get("course_structure", "Other / Not applicable") != structure: continue
+        if mtype != "All" and m.get("material_type", _cat_label(m.get("category", ""))) != mtype: continue
+        if keyword and keyword not in haystack: continue
+        shown.append(m)
+
     st.caption(trf("{0} material(s) found", len(shown)))
     if not shown:
-        st.warning(tr("Nothing matches your filters."))
+        st.info(tr("No materials match these filters. Try changing or clearing one or more filters."))
         return
 
     show_df(pd.DataFrame([{
-        "Title": m["title"], "Folder": _cat_label(m["category"]), "Subject / Paper": m.get("subject", ""),
-        "Semester": _sem_label(m["semester"]), "Size": _fmt_size(m["size"]), "Uploaded": m["uploaded_at"][:10],
+        "Title": m["title"], "Department": m["_department"], "Material Type": m.get("material_type", _cat_label(m["category"])),
+        "Subject / Paper": m.get("subject", ""), "Semester": _sem_label(m.get("semester", "General")),
+        "Year": m.get("year", ""), "Level": m.get("ug_pg", ""), "Framework": m.get("ccf_cbcs", ""),
+        "Course Structure": m.get("course_structure", ""), "Size": _fmt_size(m["size"]),
     } for m in shown]))
 
-    by_id = {m["id"]: m for m in shown}
-    mid = st.selectbox(tr("Choose a material to download"), list(by_id), key=f"mat_choice_{lang()}",
-                       format_func=lambda i: f"{by_id[i]['title']}  ·  {_cat_label(by_id[i]['category'])}")
-    m = by_id[mid]
+    by_key = {f"{m['_department']} · {m['title']} · {m['id']}": m for m in shown}
+    selected = st.selectbox(tr("Choose a material to preview or download"), list(by_key), key="mat_choice_global")
+    m = by_key[selected]
     st.markdown("### " + m["title"])
-    st.caption(trf("📁 {0} › {1}", store.dept, _cat_label(m["category"])))
-    if m.get("subject"):
-        st.markdown(trf("**Subject / Paper:** {0}", m["subject"]))
-    if m.get("description"):
-        st.info(m["description"])
+    st.caption(f"{m['_department']} · {_cat_label(m['category'])} · {m.get('material_type', _cat_label(m['category']))}")
+    details = [f"**Subject / Paper:** {m.get('subject', '')}", f"**Semester:** {_sem_label(m.get('semester', 'General'))}",
+               f"**Year:** {m.get('year', '—')}", f"**Level:** {m.get('ug_pg', '—')}",
+               f"**Framework:** {m.get('ccf_cbcs', '—')}", f"**Course Structure:** {m.get('course_structure', '—')}"]
+    st.markdown("  ·  ".join(details))
+    if m.get("description"): st.info(m["description"])
     st.caption(trf("Uploaded by {0} on {1} · {2}", m.get("uploaded_by", "-"), m["uploaded_at"], _fmt_size(m["size"])))
-    data = _material_bytes(store.dept, mid, m["uploaded_at"])
+    data = _material_bytes(m["_department"], m["id"], m["uploaded_at"])
     if data is None:
         st.warning(tr("File is missing in storage."))
     else:
-        st.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
-                           key=f"dlm_{mid}", **STRETCH)
+        preview_col, download_col = st.columns(2)
+        show_preview = preview_col.button(tr("👁️ Preview document"), key=f"preview_{m['_department']}_{m['id']}", **STRETCH)
+        download_col.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
+                                      key=f"dlm_{m['_department']}_{m['id']}", **STRETCH)
+        if show_preview:
+            st.markdown("#### " + tr("Document Preview"))
+            _preview_material(m["filename"], data)
 
 
 # ------------------------------------------------------------------ teachers / admin: upload + manage
 def render_materials_manager(store, user):
     banner(tr("📤 Upload Study Materials"),
-           trf("Department of {0} — add syllabus, notes and other materials to this department's folders", store.dept))
+           trf("Department of {0} — classify each upload so students and visitors can find it easily", store.dept))
     if "mat_ok" in ss:
         n, cat = ss.pop("mat_ok")
         st.success(trf("Uploaded {0} file(s) to the “{1}” folder.", n, _cat_label(cat)))
-    if "mat_msg" in ss:
-        st.success(tr(ss.pop("mat_msg")))
+    if "mat_msg" in ss: st.success(tr(ss.pop("mat_msg")))
     t_up, t_manage = st.tabs([tr("📤 Upload"), tr("🗂️ Manage uploaded files")])
 
     with t_up:
         st.caption(trf("Files are saved only in the {0} department's own folders — other departments never see them.", store.dept))
         ver = ss.setdefault("mat_ver", 0)
         with st.form(f"mat_upload_{ver}"):
-            cat = st.selectbox(tr("Folder (category)"), list(MATERIAL_CATEGORIES),
-                               format_func=lambda c: "📁 " + _cat_label(c))
-            title = st.text_input(tr("Title (optional if you upload several files)"))
-            c1, c2 = st.columns(2)
-            subject = c1.text_input(tr("Subject / Paper (optional)"), placeholder=tr("e.g. Mechanics · PHYS-101"))
+            cat = st.selectbox(tr("Folder (category)"), list(MATERIAL_CATEGORIES), format_func=lambda c: "📁 " + _cat_label(c))
+            mtype = st.selectbox(tr("Material Type"), MATERIAL_TYPES)
+            title = st.text_input(tr("Document title"), placeholder=tr("e.g. B.A. Semester I History Question Paper"))
+            c1, c2, c3 = st.columns(3)
+            subject = c1.text_input(tr("Subject / Paper Code"), placeholder=tr("e.g. History · HIS-101"))
             sem = c2.selectbox(tr("Semester"), SEMESTERS, format_func=_sem_label)
+            year = c3.selectbox(tr("Year of Examination / Publication"), MATERIAL_YEARS)
+            c4, c5, c6 = st.columns(3)
+            level = c4.selectbox(tr("UG / PG"), UG_PG_LEVELS)
+            framework = c5.selectbox(tr("CCF / CBCS"), CCF_CBCS_OPTIONS)
+            course = c6.selectbox(tr("Course Structure"), COURSE_STRUCTURES)
             desc = st.text_area(tr("Description (optional)"))
             files = st.file_uploader(tr("Choose file(s) to upload"), type=MATERIAL_EXTS, accept_multiple_files=True)
             go = st.form_submit_button(tr("⬆️ Upload"), **STRETCH)
         st.caption(trf("Allowed: PDF, Word, PowerPoint, Excel, text, images, ZIP · max {0} MB per file", MAX_MATERIAL_MB))
         if go:
-            if not files:
-                st.error(tr("Please choose at least one file."))
+            if not files: st.error(tr("Please choose at least one file."))
             else:
                 done = 0
                 for f in files:
@@ -3377,27 +3456,25 @@ def render_materials_manager(store, user):
                         st.error(trf("'{0}' is larger than {1} MB and was skipped.", f.name, MAX_MATERIAL_MB))
                     else:
                         stem = Path(f.name).stem
-                        name = (title.strip() if title.strip() and len(files) == 1
-                                else f"{title.strip()} – {stem}" if title.strip() else stem)
-                        store.add_material({"title": name, "category": cat, "subject": subject.strip(),
-                                            "semester": sem, "description": desc.strip(),
-                                            "uploaded_by": user["username"]}, f.name, f.getvalue())
+                        name = (title.strip() if title.strip() and len(files) == 1 else
+                                f"{title.strip()} – {stem}" if title.strip() else stem)
+                        store.add_material({"title": name, "category": cat, "material_type": mtype,
+                                            "subject": subject.strip(), "semester": sem, "year": year,
+                                            "ug_pg": level, "ccf_cbcs": framework, "course_structure": course,
+                                            "description": desc.strip(), "uploaded_by": user["username"]}, f.name, f.getvalue())
                         done += 1
                 if done:
-                    ss["mat_ok"] = (done, cat)
-                    ss["mat_ver"] = ver + 1
-                    st.rerun()
+                    ss["mat_ok"] = (done, cat); ss["mat_ver"] = ver + 1; st.rerun()
 
     with t_manage:
         mats = store.materials()
         if not mats:
-            st.info(tr("No materials uploaded yet."))
-            return
+            st.info(tr("No materials uploaded yet.")); return
         st.metric(tr("Files in this department"), len(mats))
-        show_df(pd.DataFrame([{
-            "ID": m["id"], "Title": m["title"], "Folder": _cat_label(m["category"]),
-            "Semester": _sem_label(m["semester"]), "Size": _fmt_size(m["size"]), "Uploaded": m["uploaded_at"][:10],
-        } for m in mats]))
+        show_df(pd.DataFrame([{"ID": m["id"], "Title": m["title"], "Folder": _cat_label(m["category"]),
+                               "Material Type": m.get("material_type", _cat_label(m["category"])),
+                               "Semester": _sem_label(m.get("semester", "General")), "Year": m.get("year", ""),
+                               "Size": _fmt_size(m["size"]), "Uploaded": m["uploaded_at"][:10]} for m in mats]))
         by_id = {m["id"]: m for m in mats}
         mid = st.selectbox(tr("Select material"), list(by_id), key="mat_edit_sel",
                            format_func=lambda i: f"{i} · {by_id[i]['title']}")
@@ -3405,29 +3482,29 @@ def render_materials_manager(store, user):
         st.caption(tr("To move a file to another folder, delete it and upload it again."))
         with st.form(f"mat_edit_{mid}"):
             e_title = st.text_input(tr("Title"), value=m["title"])
-            e_subject = st.text_input(tr("Subject / Paper (optional)"), value=m.get("subject", ""))
-            e_sem = st.selectbox(tr("Semester"), SEMESTERS, index=SEMESTERS.index(m["semester"]),
-                                 format_func=_sem_label)
+            e_subject = st.text_input(tr("Subject / Paper"), value=m.get("subject", ""))
+            e_sem = st.selectbox(tr("Semester"), SEMESTERS, index=SEMESTERS.index(m.get("semester", "General")), format_func=_sem_label)
+            years = MATERIAL_YEARS
+            old_year = str(m.get("year", years[0])); e_year = st.selectbox(tr("Year of Examination / Publication"), years,
+                index=years.index(old_year) if old_year in years else 0)
+            e_type = st.selectbox(tr("Material Type"), MATERIAL_TYPES,
+                index=MATERIAL_TYPES.index(m.get("material_type", MATERIAL_TYPES[-1])) if m.get("material_type", MATERIAL_TYPES[-1]) in MATERIAL_TYPES else len(MATERIAL_TYPES)-1)
+            e_level = st.selectbox(tr("UG / PG"), UG_PG_LEVELS, index=UG_PG_LEVELS.index(m.get("ug_pg", UG_PG_LEVELS[-1])) if m.get("ug_pg", UG_PG_LEVELS[-1]) in UG_PG_LEVELS else 2)
+            e_framework = st.selectbox(tr("CCF / CBCS"), CCF_CBCS_OPTIONS, index=CCF_CBCS_OPTIONS.index(m.get("ccf_cbcs", CCF_CBCS_OPTIONS[-1])) if m.get("ccf_cbcs", CCF_CBCS_OPTIONS[-1]) in CCF_CBCS_OPTIONS else 2)
+            e_course = st.selectbox(tr("Course Structure"), COURSE_STRUCTURES, index=COURSE_STRUCTURES.index(m.get("course_structure", COURSE_STRUCTURES[-1])) if m.get("course_structure", COURSE_STRUCTURES[-1]) in COURSE_STRUCTURES else len(COURSE_STRUCTURES)-1)
             e_desc = st.text_area(tr("Description (optional)"), value=m.get("description", ""))
-            a, b = st.columns(2)
-            save = a.form_submit_button(tr("💾 Save changes"), **STRETCH)
-            confirm = b.checkbox(tr("Confirm deletion"))
-            delete = b.form_submit_button(tr("🗑️ Delete"), **STRETCH)
+            a, b = st.columns(2); save = a.form_submit_button(tr("💾 Save changes"), **STRETCH)
+            confirm = b.checkbox(tr("Confirm deletion")); delete = b.form_submit_button(tr("🗑️ Delete"), **STRETCH)
         if save:
-            if not e_title.strip():
-                st.error(tr("Title cannot be empty."))
+            if not e_title.strip(): st.error(tr("Title cannot be empty."))
             else:
-                store.update_material(mid, {"title": e_title.strip(), "subject": e_subject.strip(),
-                                            "semester": e_sem, "description": e_desc.strip()})
-                ss["mat_msg"] = "Updated."
-                st.rerun()
+                store.update_material(mid, {"title": e_title.strip(), "subject": e_subject.strip(), "semester": e_sem,
+                    "year": e_year, "material_type": e_type, "ug_pg": e_level, "ccf_cbcs": e_framework,
+                    "course_structure": e_course, "description": e_desc.strip()})
+                ss["mat_msg"] = "Updated."; st.rerun()
         if delete:
-            if confirm:
-                store.delete_material(mid)
-                ss["mat_msg"] = "Deleted."
-                st.rerun()
-            else:
-                st.warning(tr("Tick **Confirm deletion** first."))
+            if confirm: store.delete_material(mid); ss["mat_msg"] = "Deleted."; st.rerun()
+            else: st.warning(tr("Tick **Confirm deletion** first."))
 
 
 # ======================================================================
