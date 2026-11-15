@@ -1727,10 +1727,10 @@ def apply_theme():
     st.markdown(NEON_CSS, unsafe_allow_html=True)
     st.markdown(EXTRA_CSS, unsafe_allow_html=True)
     
-    # Target ONLY the typed text color inside input boxes and textareas
+    # Change typed/selected text color to dark navy inside text inputs and selectboxes
     st.markdown("""
     <style>
-    .stTextInput input, .stNumberInput input, .stTextArea textarea, [data-baseweb="base-input"] input {
+    .stTextInput input, .stNumberInput input, .stTextArea textarea, [data-baseweb="base-input"] input, [data-baseweb="select"] span {
         color: #0b0f19 !important;
         -webkit-text-fill-color: #0b0f19 !important;
     }
