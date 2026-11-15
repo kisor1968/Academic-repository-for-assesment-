@@ -1723,53 +1723,9 @@ STRETCH = (
 
 
 def apply_theme():
-    st.markdown("""
-    <style>
-    [data-baseweb="select"] div, 
-    [data-baseweb="base-input"] input,
-    .stTextInput input, 
-    .stNumberInput input, 
-    .stTextArea textarea {
-        background-color: #121629 !important;
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-    }
-
-    [data-baseweb="popover"], 
-    [data-baseweb="menu"], 
-    ul[role="listbox"] {
-        background-color: #121629 !important;
-        color: #ffffff !important;
-    }
-
-    [data-baseweb="menu"] li, 
-    div[role="option"] {
-        background-color: #121629 !important;
-        color: #ffffff !important;
-    }
-
-    [data-baseweb="menu"] li:hover, 
-    div[role="option"]:hover, 
-    div[role="option"] [aria-selected="true"] {
-        background-color: #2b335c !important;
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-    }
-
-    input::placeholder, textarea::placeholder {
-        color: #94a3b8 !important;
-        -webkit-text-fill-color: #94a3b8 !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-/* Fix dropdown menu popup container colors */
-[data-baseweb="popover"], 
-[data-baseweb="menu"], 
-ul[role="listbox"] {
-    background-color: #121629 !important;
-    color: #ffffff !important;
-}
+    # If your original code had standard theme injections or CSS, keep them here.
+    # Otherwise, you can leave this function as it originally was in your codebase.
+    pass
 
 /* Ensure dropdown options are clearly visible on hover/selection */
 [data-baseweb="menu"] li, 
