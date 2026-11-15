@@ -1774,7 +1774,8 @@ P_EVAL = "👨‍🏫 Evaluation"
 P_ANALYTICS = "📊 Analytics"
 P_ADMIN = "🛡️ Admin Console"
 P_ACCOUNT = "⚙️ Account"
-
+P_FAQ = "❓ FAQ"
+P_REVIEWS = "⭐ Reviews & Feedback"
 TEACHER_PAGES = {P_CREATOR, P_UPLOAD, P_EVAL, P_ANALYTICS}   # teacher/admin only
 ADMIN_PAGES = {P_ADMIN}                             # admin only
 
@@ -4156,7 +4157,7 @@ if "flash" in st.session_state:
 
 
 def allowed_pages():
-    pages = [P_HOME]
+    pages = [P_HOME, P_FAQ, P_REVIEWS]
     if dept:
         pages += [P_TAKE, P_MATERIALS, P_CARD]
     if user is None:
