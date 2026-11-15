@@ -1,5 +1,5 @@
 """
-Departmental Assessment & Grading Portal  (single-file edition)
+Departmental Repository, Assessment & Grading Portal  (single-file edition)
 
 Run locally :  streamlit run question.py
 Streamlit Community Cloud: set "Main file path" to question.py and add requirements.txt (+ packages.txt).
