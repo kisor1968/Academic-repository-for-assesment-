@@ -4221,6 +4221,10 @@ if page in ADMIN_PAGES and not is_admin(user):
 try:
     if page == P_HOME:
         render_home()
+    elif page == P_FAQ:
+        render_faq()
+    elif page == P_REVIEWS:
+        render_reviews(user)
     elif page == P_LOGIN:
         render_login(dept)
     elif page == P_ACCOUNT and user:
