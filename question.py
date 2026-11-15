@@ -1721,12 +1721,6 @@ STRETCH = (
     else {"use_container_width": True}
 )
 
-
-def apply_theme():
-    # If your original code had standard theme injections or CSS, keep them here.
-    # Otherwise, you can leave this function as it originally was in your codebase.
-    pass
-
 /* Ensure dropdown options are clearly visible on hover/selection */
 [data-baseweb="menu"] li, 
 div[role="option"] {
