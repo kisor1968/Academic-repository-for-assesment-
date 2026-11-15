@@ -1727,17 +1727,12 @@ def apply_theme():
     st.markdown(NEON_CSS, unsafe_allow_html=True)
     st.markdown(EXTRA_CSS, unsafe_allow_html=True)
     
-    # High-contrast input box fix so typed text is clearly visible
+    # Target ONLY the typed text color inside input boxes and textareas
     st.markdown("""
     <style>
     .stTextInput input, .stNumberInput input, .stTextArea textarea, [data-baseweb="base-input"] input {
-        background-color: #121629 !important;
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-    }
-    input::placeholder, textarea::placeholder {
-        color: #94a3b8 !important;
-        -webkit-text-fill-color: #94a3b8 !important;
+        color: #0b0f19 !important;
+        -webkit-text-fill-color: #0b0f19 !important;
     }
     </style>
     """, unsafe_allow_html=True)
