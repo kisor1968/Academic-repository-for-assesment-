@@ -1045,7 +1045,29 @@ def doc_get(key, default=None):
 def doc_put(key, data):
     backend().put(key, data)
 
+# ======================================================================
+# REVIEWS & GUIDE DATA (Single-file adapted)
+# ======================================================================
+K_REVIEWS = "reviews/"
 
+def list_reviews():
+    return [(k, d) for k, d in backend().docs(K_REVIEWS)]
+
+def add_review(name, role, dept, rating, comment):
+    with _LOCK:
+        seq = max([int(k.rsplit("-", 1)[-1]) for k in backend().keys(K_REVIEWS)], default=0) + 1
+        key = f"{K_REVIEWS}REV-{seq:04d}"
+        doc = {
+            "name": name.strip(), "role": role, "dept": dept,
+            "rating": int(rating), "comment": comment.strip(),
+            "created": now_str()
+        }
+        backend().put(key, doc)
+        return key
+
+def delete_review(key):
+    with _LOCK:
+        backend().delete(key)
 # ====================================================================== department store
 class DeptStore:
     """Questions, submissions, uploads and report cards of ONE department."""
@@ -1752,7 +1774,8 @@ P_EVAL = "👨‍🏫 Evaluation"
 P_ANALYTICS = "📊 Analytics"
 P_ADMIN = "🛡️ Admin Console"
 P_ACCOUNT = "⚙️ Account"
-
+P_FAQ = "❓ FAQ"
+P_REVIEWS = "⭐ Reviews & Feedback"
 TEACHER_PAGES = {P_CREATOR, P_UPLOAD, P_EVAL, P_ANALYTICS}   # teacher/admin only
 ADMIN_PAGES = {P_ADMIN}                             # admin only
 
@@ -2385,7 +2408,167 @@ def render_account(user):
         goto(P_HOME)
         st.rerun()
 
+GUIDE = {
+    "student": [
+        "Choose your language — English or বাংলা — at the top of this panel.",
+        "On **Home**, select your department and press **Enter Student Portal**.",
+        "Sign in with the roll number and PIN given by your teacher. If no class list exists yet, just type your name and roll number.",
+        "Open **Take Assessment**, choose a test and press **Start test**. For timed tests the clock starts at once — do not refresh the page.",
+        "Answer every question. Upload your handwritten pages or code file where asked, then press **Review My Answers**.",
+        "Check your answers, edit anything you want, tick the confirmation box and press **Final Submit**. Save your Submission ID and PIN if they are shown.",
+        "When your teacher finishes marking, open **My Report Card** to see your marks and download your report card.",
+        "Open **Study Materials** any time to download your department's syllabus, notes and question papers.",
+    ],
+    "teacher": [
+        "Select your department on **Home**, open **Faculty Login** and sign in with the username and temporary password from the administrator. Choose a new password when asked.",
+        "**Question Creator:** add questions with a number, marks, type and answer key — or import them from a PDF.",
+        "**Students:** import your class list (CSV) and download the PIN sheet — PINs are shown only once.",
+        "**Tests:** create a test — choose its questions, opening and closing time, time limit and negative marking — and publish it.",
+        "**Upload Materials:** put the syllabus, notes and question papers in your department's folders.",
+        "**Evaluation:** open each submission, give marks and remarks to written and code answers, then press **Finalise** to create the report card.",
+        "**Analytics:** see averages, score distribution, weak questions and test comparison, and download the results as CSV.",
+        "Sign out from **Account** when you finish, especially on a shared computer.",
+    ],
+    "admin": [
+        "Open **Faculty Login** and sign in as `admin`; set a new permanent password.",
+        "In **Admin Console → Faculty Accounts**, choose a department first, then create each teacher's username and temporary password.",
+        "Use **Reset password** if a teacher forgets theirs, and **Delete account** when someone leaves.",
+        "In **Storage & Backup**, press **Test connection** after any setup change and **Back up now** before big changes. Restore only when really needed.",
+        "Check the **Audit Log** now and then for failed sign-ins and other security events.",
+        "Remove inappropriate entries from **Reviews**.",
+    ],
+}
+ROLE_LABELS = {"student": "Student", "teacher": "Teacher", "admin": "Administrator"}
 
+def sidebar_guide(user, dept):
+    default = "admin" if user and user["role"] == "admin" else "teacher" if user else "student"
+    with st.expander(tr("📖 How to use this portal — step by step")):
+        who = st.selectbox(tr("I am a…"), list(ROLE_LABELS), index=list(ROLE_LABELS).index(default),
+                           format_func=lambda r: tr(ROLE_LABELS[r]), key=f"guide_who_{lang()}_{default}")
+        st.markdown("\n".join(f"{i}. {tr(step)}" for i, step in enumerate(GUIDE[who], 1)))
+        st.caption(tr("More answers are in ❓ FAQ."))
+
+FAQ = [
+    ("🎓 Students", [
+        ("I forgot my PIN. What should I do?", "Ask your teacher to open **Students**, select your name and press **Generate new PIN**. Your old PIN stops working."),
+        ("What happens if I refresh the page during a test?", "Answers you have not submitted are lost, but the test clock keeps running. Sign in again and press **Resume test**. Avoid refreshing and keep your internet on."),
+        ("What if the time ends while I am writing?", "Your answers are submitted automatically and marked as auto-submitted. If the page could not react immediately, the submission is also marked late and your teacher decides what to do."),
+        ("Can I take a test twice?", "No — each test allows one attempt per student. If something went wrong, ask your teacher; they can remove your submission so you can try again."),
+        ("Why can't I see the test I am looking for?", "A test appears only after the teacher publishes it. It can also be **not open yet** or **closed** — the dates are shown on the test card (Indian time)."),
+        ("Where can I find my marks and report card?", "Under **My Report Card**, after your teacher has finalised the evaluation. Until then it shows that evaluation is pending."),
+        ("My name is in Bengali. Which report card should I download?", "Use the **Printable report card (HTML)**: open it and choose Print → Save as PDF. It shows Bengali letters correctly; the plain PDF may not."),
+        ("Which files can I upload with my answers?", "Handwritten answers: PDF, PNG or JPG. Code: .py or .txt files. Each file can be up to 10 MB. Uploaded code is only stored for your teacher — it is never run."),
+        ("How does negative marking work?", "If a test has negative marking, a wrong MCQ answer loses a fraction of that question's marks (shown on the test card). Unanswered questions lose nothing, and your total never goes below zero."),
+        ("I cannot find my department's study materials.", "Select the right department on **Home** first. Materials are kept separately for each department; if the folder is empty, your teacher has not uploaded anything yet."),
+    ]),
+    ("👨‍🏫 Teachers", [
+        ("I forgot my password.", "Ask the administrator to reset it in **Admin Console → Faculty Accounts**. You will get a temporary password and must choose a new one at your next login."),
+        ("How do I let a student retake a test?", "Open **Evaluation**, choose the student's submission and use **Delete submission** in the danger zone. The student's attempt is cleared too, so they can start again."),
+        ("How do I switch student login on or off?", "Import a class list in **Students** to switch roll-number + PIN login on. Removing the whole roster switches back to anonymous mode, where students type their own name and roll."),
+        ("Does the time limit work without a class list?", "Not reliably: without a class list the clock starts in the student's browser and a refresh can restart it. Import a class list to enforce time limits."),
+        ("What happens to submissions if I edit or delete a question or test?", "Nothing — every submission keeps its own copy of the paper, so marks and report cards stay correct."),
+        ("Can I upload large video lectures?", "Study materials accept PDF, Word, PowerPoint, Excel, text, images and ZIP up to 25 MB per file. For videos, upload a document that contains the link."),
+    ]),
+    ("🛡️ Administrators", [
+        ("I forgot the admin password.", "Put a new value for `ADMIN_RESET_PASSWORD` in Streamlit Secrets, save, and sign in with it; then choose a new password."),
+        ("Is the data safe? Where is it stored?", "Records and files are stored in your Supabase project. Passwords and PINs are stored in scrambled form, sign-ins are locked after repeated mistakes, and automatic backups are kept. Download a backup now and then for extra safety."),
+        ("How does backups and restore work?", "A backup is made automatically when the app is used and the last one is over 24 hours old; the latest 15 are kept. Restoring replaces all records with the backup (after taking a safety copy) and needs you to type RESTORE."),
+    ]),
+]
+
+def render_faq():
+    banner(tr("❓ Frequently Asked Questions"), tr("Quick answers for students, teachers and administrators"))
+    q = st.text_input(tr("Search the questions"), key=f"faq_q_{lang()}").strip().lower()
+    shown = 0
+    for title, items in FAQ:
+        rows = [(tr(a), tr(b)) for a, b in items if not q or q in tr(a).lower() or q in tr(b).lower()]
+        if not rows:
+            continue
+        st.markdown(f"#### {tr(title)}")
+        for question, answer in rows:
+            with st.expander(question):
+                st.markdown(answer)
+            shown += 1
+    if not shown:
+        st.info(tr("No question matches your search."))
+    st.caption(tr("Still stuck? Please ask your department teacher, or write a review with your question."))
+
+REVIEW_ROLES = {"student": "Student", "teacher": "Teacher", "other": "Parent / Other"}
+REVIEW_COOLDOWN = 600
+_MD_SPECIAL = re.compile(r"([\\`*_\[\]()#!|~$<>&])")
+
+def _plain(text):
+    return _MD_SPECIAL.sub(r"\\\1", text).replace("\n", "  \n")
+
+def render_reviews(user):
+    banner(tr("⭐ Reviews & Feedback"), tr("Share your experience with the portal — your review helps us improve it"))
+    try:
+        reviews = list_reviews()
+    except StorageError as e:
+        st.error(str(e))
+        return
+    if reviews:
+        total = len(reviews)
+        avg = sum(r["rating"] for _, r in reviews) / total
+        c1, c2 = st.columns(2)
+        c1.metric(tr("Average rating"), f"{avg:.1f} / 5")
+        c2.metric(tr("Total reviews"), total)
+        for n in range(5, 0, -1):
+            cnt = sum(1 for _, r in reviews if r["rating"] == n)
+            a, b, c = st.columns([1, 6, 1])
+            a.markdown(f"{n} ⭐")
+            b.progress(cnt / total)
+            c.markdown(str(cnt))
+    else:
+        st.info(tr("No reviews yet — be the first to write one!"))
+
+    st.markdown(tr("#### ✍️ Write a review"))
+    ver = ss.setdefault("rv_ver", 0)
+    with st.form(f"review_form_{ver}"):
+        a, b = st.columns(2)
+        name = a.text_input(tr("Your name (optional)"), max_chars=60)
+        role = b.selectbox(tr("I am a…"), list(REVIEW_ROLES), format_func=lambda r: tr(REVIEW_ROLES[r]), key=f"rv_role_{lang()}_{ver}")
+        c, d = st.columns(2)
+        dept_opts = [""] + DEPARTMENTS
+        dept_sel = c.selectbox(tr("Department (optional)"), dept_opts, key=f"rv_dept_{lang()}_{ver}",
+                               format_func=lambda x: tr("Not specified") if not x else dname(x))
+        rating = d.radio(tr("Your rating"), [5, 4, 3, 2, 1], horizontal=True, format_func=lambda n: "⭐" * n, key=f"rv_rating_{ver}")
+        comment = st.text_area(tr("Your review"), max_chars=600, placeholder=tr("What worked well? What can be improved?"))
+        send = st.form_submit_button(tr("📨 Submit review"), **STRETCH)
+    st.caption(tr("Maximum 600 characters. Please be respectful — reviews are public."))
+    if send:
+        wait = REVIEW_COOLDOWN - (time.time() - ss.get("rv_last", 0))
+        if len(comment.strip()) < 5:
+            st.error(tr("Please write a short comment (at least 5 characters)."))
+        elif wait > 0:
+            st.error(tr("Please wait a few minutes before posting another review."))
+        else:
+            add_review(name, role, dept_sel, rating, comment)
+            ss["rv_last"] = time.time()
+            ss["rv_ver"] = ver + 1
+            ss["rv_thanks"] = True
+            st.rerun()
+    if ss.pop("rv_thanks", False):
+        st.success(tr("Thank you! Your review has been added."))
+
+    if reviews:
+        st.markdown("---")
+        shown = ss.setdefault("rv_shown", 10)
+        admin_view = is_admin(user)
+        for key, r in reviews[:shown]:
+            who = r["name"] or tr("Anonymous")
+            meta = " · ".join(x for x in [tr(REVIEW_ROLES.get(r["role"], "Parent / Other")), dname(r["dept"]) if r["dept"] else "", r["created"][:10]] if x)
+            st.markdown(f"{'⭐' * r['rating']}  **{_plain(who)}**")
+            st.caption(_plain(meta))
+            st.markdown(_plain(r["comment"]))
+            st.markdown("<hr style='margin:6px 0;opacity:.25'>", unsafe_allow_html=True)
+            if admin_view and st.button(tr("🗑️ Delete review"), key=f"rvdel_{key}"):
+                delete_review(key)
+                st.success(tr("Review deleted."))
+                st.rerun()
+        if len(reviews) > shown and st.button(tr("Show more reviews"), **STRETCH):
+            ss["rv_shown"] = shown + 10
+            st.rerun()
 # ======================================================================
 # VIEWS/ADMIN — Administrator console: teacher credentials per department, audit log.
 # ======================================================================
@@ -3974,7 +4157,7 @@ if "flash" in st.session_state:
 
 
 def allowed_pages():
-    pages = [P_HOME]
+    pages = [P_HOME, P_FAQ, P_REVIEWS]
     if dept:
         pages += [P_TAKE, P_MATERIALS, P_CARD]
     if user is None:
@@ -4002,6 +4185,8 @@ if st.session_state.get("nav") not in pages:
 
 # ---------------------------------------------------------------- sidebar
 with st.sidebar:
+    if os.path.exists("pjc_logo.jpg"):
+        st.image("pjc_logo.jpg", width=110)
     st.radio("🌐 Language / ভাষা", list(LANGS), key="lang", format_func=LANGS.get, horizontal=True)
     st.markdown(tr("## 🎓 Portal"))
     stu = current_student(dept) if dept else None
@@ -4017,6 +4202,7 @@ with st.sidebar:
             for k in [k for k in st.session_state if k.startswith("w_") or k.startswith("stu_")]:
                 del st.session_state[k]
             st.rerun()
+    sidebar_guide(user, dept)
     page = st.radio(tr("Navigate"), pages, key="nav", label_visibility="collapsed", format_func=tr)
     if user:
         st.caption(tr("Session auto-expires after 30 idle minutes."))
@@ -4035,6 +4221,10 @@ if page in ADMIN_PAGES and not is_admin(user):
 try:
     if page == P_HOME:
         render_home()
+    elif page == P_FAQ:
+        render_faq()
+    elif page == P_REVIEWS:
+        render_reviews(user)
     elif page == P_LOGIN:
         render_login(dept)
     elif page == P_ACCOUNT and user:
@@ -4066,3 +4256,16 @@ try:
 except StorageError as e:
     st.error(trf("💾 Storage problem: {0}", e))
     st.info(tr("Check the Supabase keys in Secrets and the setup SQL (Admin Console → Storage & Backup → Test connection)."))
+    # ======================================================================
+# FOOTER / COPYRIGHT
+# ======================================================================
+st.markdown(
+    """
+    <hr style="margin-top: 3rem; margin-bottom: 1rem; opacity: 0.25;">
+    <div style="text-align: center; font-size: 0.85rem; opacity: 0.78; padding-bottom: 1rem; line-height: 1.5;">
+        &copy; 2026 <strong>Prabhu Jagatbandhu College</strong>. All rights reserved.<br>
+        Developed and maintained by <strong>Dr. Kisor Mukhopadhyay</strong>, Associate Professor, Department of Physics.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
