@@ -4256,3 +4256,16 @@ try:
 except StorageError as e:
     st.error(trf("💾 Storage problem: {0}", e))
     st.info(tr("Check the Supabase keys in Secrets and the setup SQL (Admin Console → Storage & Backup → Test connection)."))
+# ======================================================================
+# FOOTER / COPYRIGHT
+# ======================================================================
+st.markdown(
+    """
+    <hr style="margin-top: 3rem; margin-bottom: 1rem; opacity: 0.25;">
+    <div style="text-align: center; font-size: 0.85rem; opacity: 0.78; padding-bottom: 1rem; line-height: 1.5;">
+        &copy; 2026 <strong>Prabhu Jagatbandhu College</strong>. All rights reserved.<br>
+        Developed and maintained by <strong>Dr. Kisor Mukhopadhyay</strong>, Associate Professor, Department of Physics.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
