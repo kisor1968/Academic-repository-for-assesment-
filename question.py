@@ -2339,7 +2339,7 @@ def _enter():
 
 def render_home():
     render_hero(320)
-    st.title(tr("🎓 Departmental Assessment & Grading Portal"))
+    st.title(tr("🎓 Departmental Repository, Assessment & Grading Portal"))
     st.markdown(f"**{tr(INSTITUTION_NAME)}**")
     st.caption(tr(INSTITUTION_ADDRESS))
     st.caption(tr("Use the menu on the left (☰ on phones) to switch language."))
