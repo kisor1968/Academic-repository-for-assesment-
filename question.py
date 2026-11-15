@@ -1723,49 +1723,27 @@ STRETCH = (
 
 
 def apply_theme():
+    # NEON_CSS already contains the cubes; EXTRA_CSS adds v2 widgets.
+    st.markdown(NEON_CSS, unsafe_allow_html=True)
+    st.markdown(EXTRA_CSS, unsafe_allow_html=True)
+    
+    # High-contrast input box fix so typed text is clearly visible
     st.markdown("""
     <style>
-    /* ======================================================================
-       RESTORED DARK THEME & HIGH-CONTRAST INPUT FIX
-       ====================================================================== */
-    
-    /* Main app dark background and font styling */
-    .stApp {
-        background-color: #0b0f19 !important;
-        color: #e9e4ff !important;
-    }
-    
-    /* Input box dark backgrounds and white text */
     .stTextInput input, .stNumberInput input, .stTextArea textarea, [data-baseweb="base-input"] input {
         background-color: #121629 !important;
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
     }
-    
-    /* Placeholder text visibility */
     input::placeholder, textarea::placeholder {
         color: #94a3b8 !important;
         -webkit-text-fill-color: #94a3b8 !important;
     }
-    
-    /* Dropdown menu background & text */
-    [data-baseweb="popover"], [data-baseweb="menu"], ul[role="listbox"] {
-        background-color: #121629 !important;
-        color: #ffffff !important;
-    }
-    
-    [data-baseweb="menu"] li, div[role="option"] {
-        background-color: #121629 !important;
-        color: #ffffff !important;
-    }
-    
-    [data-baseweb="menu"] li:hover, div[role="option"]:hover, div[role="option"] [aria-selected="true"] {
-        background-color: #2b335c !important;
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-    }
     </style>
     """, unsafe_allow_html=True)
+
+    if lang() == "bn":  # letter-spacing breaks Bengali conjuncts
+        st.markdown("<style>h1,h2,h3,h4,h5,.stTabs [data-baseweb='tab']{letter-spacing:0 !important;}</style>", unsafe_allow_html=True)
 
 
 def render_html(html, height):
