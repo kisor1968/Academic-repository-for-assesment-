@@ -1738,6 +1738,7 @@ def apply_theme():
         -webkit-text-fill-color: #ffffff !important;
     }
 
+    /* Fix dropdown menu popup container colors */
     [data-baseweb="popover"], 
     [data-baseweb="menu"], 
     ul[role="listbox"] {
@@ -1745,6 +1746,7 @@ def apply_theme():
         color: #ffffff !important;
     }
 
+    /* Ensure dropdown options are clearly visible on hover/selection */
     [data-baseweb="menu"] li, 
     div[role="option"] {
         background-color: #121629 !important;
@@ -1759,6 +1761,7 @@ def apply_theme():
         -webkit-text-fill-color: #ffffff !important;
     }
 
+    /* Fix placeholder text visibility */
     input::placeholder, textarea::placeholder {
         color: #94a3b8 !important;
         -webkit-text-fill-color: #94a3b8 !important;
