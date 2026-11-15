@@ -4185,6 +4185,8 @@ if st.session_state.get("nav") not in pages:
 
 # ---------------------------------------------------------------- sidebar
 with st.sidebar:
+    if os.path.exists("pjc_logo.jpg"):
+        st.image("pjc_logo.jpg", use_container_width=True)
     st.radio("🌐 Language / ভাষা", list(LANGS), key="lang", format_func=LANGS.get, horizontal=True)
     st.markdown(tr("## 🎓 Portal"))
     stu = current_student(dept) if dept else None
@@ -4200,6 +4202,7 @@ with st.sidebar:
             for k in [k for k in st.session_state if k.startswith("w_") or k.startswith("stu_")]:
                 del st.session_state[k]
             st.rerun()
+    sidebar_guide(user, dept)
     page = st.radio(tr("Navigate"), pages, key="nav", label_visibility="collapsed", format_func=tr)
     if user:
         st.caption(tr("Session auto-expires after 30 idle minutes."))
