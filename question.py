@@ -1721,21 +1721,6 @@ STRETCH = (
     else {"use_container_width": True}
 )
 
-/* Ensure dropdown options are clearly visible on hover/selection */
-[data-baseweb="menu"] li, 
-div[role="option"] {
-    background-color: #121629 !important;
-    color: #ffffff !important;
-}
-
-[data-baseweb="menu"] li:hover, 
-div[role="option"]:hover, 
-div[role="option"] [aria-selected="true"] {
-    background-color: #2b335c !important;
-    color: #ffffff !important;
-    -webkit-text-fill-color: #ffffff !important;
-}
-
 /* Fix placeholder text visibility */
 input::placeholder, textarea::placeholder {
     color: #94a3b8 !important;
