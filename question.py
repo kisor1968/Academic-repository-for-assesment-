@@ -469,7 +469,7 @@ BN = {
     "Marks (max {0:g})": "নম্বর (সর্বোচ্চ {0:g})",
     "Faculty remark": "শিক্ষকের মন্তব্য",
     "e.g. Correct logic, missing edge-case handling": "যেমন: যুক্তি সঠিক, প্রান্তিক ক্ষেত্র বিবেচনা করা হয়নি",
-    "🎓 Departmental Assessment & Grading Portal": "🎓 বিভাগীয় মূল্যায়ন ও গ্রেডিং পোর্টাল",
+    "🎓 Departmental Repository, Assessment & Grading Portal": "🎓 বিভাগীয় ভান্ডার, মূল্যায়ন ও গ্রেডিং পোর্টাল",
     "<div class='dept-card'><h3 style='margin:0'>🏛️ Select Your Department</h3><div style='margin-top:6px'>Pick the department whose assessments and resources you need.</div></div>": "<div class='dept-card'><h3 style='margin:0'>🏛️ আপনার বিভাগ নির্বাচন করুন</h3><div style='margin-top:6px'>যে বিভাগের মূল্যায়ন ও তথ্য প্রয়োজন সেটি বেছে নিন।</div></div>",
     "Choose the academic department whose resources you want to access": "যে শিক্ষা বিভাগের তথ্য দেখতে চান সেটি বেছে নিন",
     "🚀 Enter Student Portal": "🚀 শিক্ষার্থী পোর্টালে প্রবেশ করুন",
