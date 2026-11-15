@@ -4186,7 +4186,7 @@ if st.session_state.get("nav") not in pages:
 # ---------------------------------------------------------------- sidebar
 with st.sidebar:
     if os.path.exists("pjc_logo.jpg"):
-        st.image("pjc_logo.jpg", use_container_width=True)
+        st.image("pjc_logo.jpg", width=110)
     st.radio("🌐 Language / ভাষা", list(LANGS), key="lang", format_func=LANGS.get, horizontal=True)
     st.markdown(tr("## 🎓 Portal"))
     stu = current_student(dept) if dept else None
