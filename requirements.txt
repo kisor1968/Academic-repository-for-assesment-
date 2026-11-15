@@ -1,5 +1,5 @@
-streamlit>=1.36
-pandas>-2.0.0
+streamlit[pdf]>=1.49.0
+pandas>=2.0.0
 reportlab
 pypdf
 pytesseract
@@ -7,6 +7,5 @@ pdf2image
 pillow
 requests>=2.31.0
 tzdata
-streamlit[pdf]>=1.49.0
 
 
