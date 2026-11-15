@@ -3301,14 +3301,18 @@ def _preview_material(filename, data):
     """Render a safe in-app preview where the browser/app supports the file format."""
     ext = Path(filename).suffix.lower()
     if ext == ".pdf":
-        import base64
-        encoded = base64.b64encode(data).decode("ascii")
-        components.html(
-            f'<iframe title="Document preview" src="data:application/pdf;base64,{encoded}" '
-            'width="100%" height="650" style="border:1px solid #aaa;border-radius:8px"></iframe>',
-            height=665, scrolling=True,
-        )
-        return True
+        # Use Streamlit's native PDF viewer instead of a base64 data-URL iframe.
+        # Chrome may block data-URL documents embedded in sandboxed components.
+        if hasattr(st, "pdf"):
+            try:
+                st.pdf(data, height=700)
+                return True
+            except Exception as exc:
+                st.warning(tr("The built-in PDF viewer could not display this file. Please use Download."))
+                st.caption(str(exc))
+                return False
+        st.info(tr("PDF preview needs Streamlit 1.49 or newer with the PDF extra installed. Please use Download for now."))
+        return False
     if ext in (".png", ".jpg", ".jpeg"):
         st.image(data, caption=filename, use_container_width=True)
         return True
