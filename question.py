@@ -1728,8 +1728,48 @@ def apply_theme():
     st.markdown(EXTRA_CSS, unsafe_allow_html=True)
     if lang() == "bn":  # letter-spacing breaks Bengali conjuncts
         st.markdown("<style>h1,h2,h3,h4,h5,.stTabs [data-baseweb='tab']{letter-spacing:0 !important;}</style>", unsafe_allow_html=True)
+    /* ======================================================================
+   HIGH-CONTRAST INPUT & SELECTBOX STYLING FIX
+   ====================================================================== */
+/* Fix selectbox, text input, and number input background and text colors */
+[data-baseweb="select"] div, 
+[data-baseweb="base-input"] input,
+.stTextInput input, 
+.stNumberInput input, 
+.stTextArea textarea {
+    background-color: #121629 !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
 
+/* Fix dropdown menu popup container colors */
+[data-baseweb="popover"], 
+[data-baseweb="menu"], 
+ul[role="listbox"] {
+    background-color: #121629 !important;
+    color: #ffffff !important;
+}
 
+/* Ensure dropdown options are clearly visible on hover/selection */
+[data-baseweb="menu"] li, 
+div[role="option"] {
+    background-color: #121629 !important;
+    color: #ffffff !important;
+}
+
+[data-baseweb="menu"] li:hover, 
+div[role="option"]:hover, 
+div[role="option"] [aria-selected="true"] {
+    background-color: #2b335c !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Fix placeholder text visibility */
+input::placeholder, textarea::placeholder {
+    color: #94a3b8 !important;
+    -webkit-text-fill-color: #94a3b8 !important;
+}
 def render_html(html, height):
     """Embed a small HTML/JS snippet. Uses st.iframe on new Streamlit, components.html on older versions."""
     if hasattr(st, "iframe"):
