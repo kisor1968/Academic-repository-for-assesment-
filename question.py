@@ -1,5 +1,5 @@
 """
-Departmental Repository, Assessment & Grading Portal  (single-file edition)
+Departmental Assessment & Grading Portal  (single-file edition)
 
 Run locally :  streamlit run question.py
 Streamlit Community Cloud: set "Main file path" to question.py and add requirements.txt (+ packages.txt).
@@ -469,7 +469,7 @@ BN = {
     "Marks (max {0:g})": "নম্বর (সর্বোচ্চ {0:g})",
     "Faculty remark": "শিক্ষকের মন্তব্য",
     "e.g. Correct logic, missing edge-case handling": "যেমন: যুক্তি সঠিক, প্রান্তিক ক্ষেত্র বিবেচনা করা হয়নি",
-    "🎓 Departmental Repository, Assessment & Grading Portal": "🎓 বিভাগীয় ভান্ডার, মূল্যায়ন ও গ্রেডিং পোর্টাল",
+    "🎓 Departmental Assessment & Grading Portal": "🎓 বিভাগীয় মূল্যায়ন ও গ্রেডিং পোর্টাল",
     "<div class='dept-card'><h3 style='margin:0'>🏛️ Select Your Department</h3><div style='margin-top:6px'>Pick the department whose assessments and resources you need.</div></div>": "<div class='dept-card'><h3 style='margin:0'>🏛️ আপনার বিভাগ নির্বাচন করুন</h3><div style='margin-top:6px'>যে বিভাগের মূল্যায়ন ও তথ্য প্রয়োজন সেটি বেছে নিন।</div></div>",
     "Choose the academic department whose resources you want to access": "যে শিক্ষা বিভাগের তথ্য দেখতে চান সেটি বেছে নিন",
     "🚀 Enter Student Portal": "🚀 শিক্ষার্থী পোর্টালে প্রবেশ করুন",
@@ -1723,26 +1723,48 @@ STRETCH = (
 
 
 def apply_theme():
+    """Apply the portal theme and expose live foreground/background colour controls."""
+    # Keep the selected colours in session state so they persist across Streamlit reruns.
+    st.session_state.setdefault("field_bg_colour", "#1B0A3D")
+    st.session_state.setdefault("field_text_colour", "#FFFFFF")
+    st.session_state.setdefault("field_hint_colour", "#B9A9DF")
+
+    with st.sidebar.expander("🎨 Input box colour settings", expanded=False):
+        st.caption("Change these colours if text in an input field is difficult to read.")
+        st.color_picker("Input box background", key="field_bg_colour")
+        st.color_picker("Text typed in input boxes", key="field_text_colour")
+        st.color_picker("Placeholder / hint text", key="field_hint_colour")
+        st.caption("The changes apply to text boxes, password fields, number fields, and most selection fields.")
+
     # NEON_CSS already contains the cubes; EXTRA_CSS adds v2 widgets.
     st.markdown(NEON_CSS, unsafe_allow_html=True)
     st.markdown(EXTRA_CSS, unsafe_allow_html=True)
-    
-    # Login inputs = Black font, Review/Dark inputs = White font
-    st.markdown("""
-    <style>
-    /* Default text inputs (Login) get black font */
-    .stTextInput input, .stNumberInput input, [data-baseweb="base-input"] input {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-    }
-    
-    /* Text inputs and textareas inside forms or dark containers (like Review Name & Review Box) get white font */
-    form .stTextInput input, form .stTextArea textarea {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+
+    # Inject user-selected colours after the main theme so they override its defaults.
+    field_bg = st.session_state["field_bg_colour"]
+    field_text = st.session_state["field_text_colour"]
+    field_hint = st.session_state["field_hint_colour"]
+    st.markdown(
+        f"""
+        <style>
+        :root {{
+          --field-bg: {field_bg};
+          --field-text: {field_text};
+          --field-placeholder: {field_hint};
+          --field-border: {field_text};
+        }}
+        /* Override the legacy selectbox rule as well as the standard input rules. */
+        .stSelectbox [data-baseweb="select"] *,
+        .stMultiSelect [data-baseweb="select"] *,
+        [data-baseweb="select"] span,
+        [data-baseweb="select"] input {{
+          color: {field_text} !important;
+          -webkit-text-fill-color: {field_text} !important;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if lang() == "bn":  # letter-spacing breaks Bengali conjuncts
         st.markdown("<style>h1,h2,h3,h4,h5,.stTabs [data-baseweb='tab']{letter-spacing:0 !important;}</style>", unsafe_allow_html=True)
@@ -2093,28 +2115,53 @@ hr{border:none !important;height:2px !important;
   color:#fff !important;box-shadow:0 0 22px rgba(255,46,151,.7);}
 .stTabs [data-baseweb="tab-highlight"],.stTabs [data-baseweb="tab-border"]{display:none;}
 
-/* ---------- Inputs (glass) ---------- */
-/* wrappers must be dark too, otherwise white text sits on a white box */
+/* ---------- Inputs: colours are controlled by the live colour chooser ---------- */
+:root{
+  --field-bg: #1b0a3d;
+  --field-text: #ffffff;
+  --field-placeholder: #b9a9df;
+  --field-border: rgba(0,229,255,.55);
+}
 [data-baseweb="input"],[data-baseweb="base-input"],[data-baseweb="textarea"],
-.stTextInput>div>div,.stTextArea>div>div,.stNumberInput>div>div{
-  background:#1b0a3d !important;border-radius:12px !important;}
+[data-baseweb="select"]>div,[data-testid="stDateInput"] input,
+[data-testid="stTimeInput"] input,.stTextInput>div>div,
+.stTextArea>div>div,.stNumberInput>div>div{
+  background:var(--field-bg) !important;
+  border-radius:12px !important;
+}
 .stTextInput input,.stTextArea textarea,.stNumberInput input,
-[data-baseweb="input"] input,[data-baseweb="textarea"] textarea,[data-baseweb="base-input"] input,
-[data-baseweb="select"] *{
-  background:#1b0a3d !important;color:#ffffff !important;-webkit-text-fill-color:#ffffff !important;
-  caret-color:#00e5ff !important;}
-.stTextInput input::placeholder,.stTextArea textarea::placeholder,.stNumberInput input::placeholder{
-  color:#9d8fd1 !important;-webkit-text-fill-color:#9d8fd1 !important;opacity:1 !important;}
+[data-baseweb="input"] input,[data-baseweb="textarea"] textarea,
+[data-baseweb="base-input"] input,[data-baseweb="select"] input,
+[data-testid="stDateInput"] input,[data-testid="stTimeInput"] input{
+  background:var(--field-bg) !important;
+  color:var(--field-text) !important;
+  -webkit-text-fill-color:var(--field-text) !important;
+  caret-color:var(--field-text) !important;
+  border:1px solid var(--field-border) !important;
+  border-radius:12px !important;
+  transition:border-color .2s, box-shadow .2s;
+}
+.stTextInput input::placeholder,.stTextArea textarea::placeholder,
+.stNumberInput input::placeholder,[data-baseweb="input"] input::placeholder,
+[data-baseweb="textarea"] textarea::placeholder{
+  color:var(--field-placeholder) !important;
+  -webkit-text-fill-color:var(--field-placeholder) !important;
+  opacity:1 !important;
+}
+.stTextInput input:focus,.stTextArea textarea:focus,.stNumberInput input:focus,
+[data-baseweb="input"] input:focus,[data-baseweb="textarea"] textarea:focus,
+[data-testid="stDateInput"] input:focus,[data-testid="stTimeInput"] input:focus{
+  border-color:var(--c3) !important;
+  box-shadow:0 0 0 2px rgba(0,229,255,.28) !important;
+}
 .stNumberInput button{background:#2a1260 !important;color:#fff !important;}
-.stTextInput input,.stTextArea textarea,.stNumberInput input,[data-baseweb="select"]>div{
-  background:#1b0a3d !important;color:#fff !important;
-  border:1px solid rgba(0,229,255,.35) !important;border-radius:12px !important;
-  backdrop-filter:blur(8px);transition:all .3s;}
-.stTextInput input:focus,.stTextArea textarea:focus,.stNumberInput input:focus{
-  border-color:var(--c1) !important;box-shadow:0 0 0 2px rgba(255,46,151,.45),0 0 25px rgba(255,46,151,.45) !important;
-  transform:translateY(-2px);}
-[data-baseweb="popover"] ul{background:#1a0638 !important;}
-[data-baseweb="popover"] li{color:#fff !important;}
+[data-baseweb="select"]>div{border:1px solid var(--field-border) !important;}
+[data-baseweb="popover"] ul,[data-baseweb="menu"]{background:var(--field-bg) !important;}
+[data-baseweb="popover"] li,[data-baseweb="menu"] li{color:var(--field-text) !important;}
+[data-baseweb="popover"] [aria-selected="true"]{background:rgba(0,229,255,.22) !important;}
+[data-baseweb="select"] [data-testid="stMarkdownContainer"],
+[data-baseweb="select"] span{color:var(--field-text) !important;}
+
 [data-testid="stFileUploader"] section{background:rgba(255,255,255,.05);border:2px dashed var(--c3);
   border-radius:16px;transition:all .3s;}
 [data-testid="stFileUploader"] section:hover{border-color:var(--c1);box-shadow:0 0 25px rgba(255,46,151,.5);
@@ -2339,7 +2386,7 @@ def _enter():
 
 def render_home():
     render_hero(320)
-    st.title(tr("🎓 Departmental Repository, Assessment & Grading Portal"))
+    st.title(tr("🎓 Departmental Assessment & Grading Portal"))
     st.markdown(f"**{tr(INSTITUTION_NAME)}**")
     st.caption(tr(INSTITUTION_ADDRESS))
     st.caption(tr("Use the menu on the left (☰ on phones) to switch language."))
