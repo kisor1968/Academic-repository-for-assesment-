@@ -83,7 +83,7 @@ MATERIAL_EXTS = ["pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "txt", "png
 MATERIAL_TYPES = ["Question Paper", "Book", "Lecture Notes", "Syllabus", "Assignment", "Question Bank", "Reference Material", "Other"]
 UG_PG_LEVELS = ["UG", "PG", "Other / Not applicable"]
 CCF_CBCS_OPTIONS = ["CCF", "CBCS", "Other / Not applicable"]
-COURSE_STRUCTURES = ["Major", "Minor", "MDC", "SEC", "AEC", "VAC", "Core", "Elective", "Honours", "General", "Programme", "Other / Not applicable"]
+COURSE_STRUCTURES = ["Major", "Minor", "MDC", "SEC", "AEC", "CVAC", "Core", "Elective", "Honours", "General", "Programme", "Other / Not applicable"]
 MATERIAL_YEARS = [str(y) for y in range(datetime.now().year + 1, 1999, -1)]
 MAX_MATERIAL_MB = 25
 # Tests, timing, student login, backups
