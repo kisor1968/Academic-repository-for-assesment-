@@ -2986,36 +2986,14 @@ def _preview_files(a):
         kind = "Code file" if slot == "code_file" else "Document / image"
         st.markdown(trf("📎 **{0}:** `{1}` ({2:.1f} KB)", kind, f['name'], len(f['bytes']) / 1024))
         name = f["name"].lower()
-
         if name.endswith((".png", ".jpg", ".jpeg")):
             try:
                 st.image(f["bytes"], width=380)
             except Exception:  # corrupt / unreadable image
                 st.warning(tr("Preview not available for this file (it will still be submitted)."))
-
         elif name.endswith((".py", ".txt")):
             st.code(f["bytes"].decode("utf-8", errors="replace")[:5000], language="python")
 
-        elif name.endswith(".pdf"):
-            try:
-                st.pdf(
-                    f["bytes"],
-                    height=650,
-                    key=f"preview_pdf_{slot}_{f['name']}",
-                )
-            except Exception:
-                st.warning(tr("Preview not available for this file (it will still be submitted)."))
-
-            st.download_button(
-                "⬇️ Download PDF",
-                data=f["bytes"],
-                file_name=f["name"],
-                mime="application/pdf",
-                key=f"download_pdf_{slot}_{f['name']}",
-            )
-
-        else:
-            st.info(tr("Preview not available for this file (it will still be submitted)."))
 
 def _render_review(store, t, questions, deadline):
     d = ss["stu_draft"]
@@ -3310,44 +3288,34 @@ def render_study_materials(store):
     else:
         # --- SAFE PREVIEW & DOWNLOAD SECTION ---
         filename_lower = m["filename"].lower()
-    with st.expander(tr("🔍 Preview Material"), expanded=False):
-        filename_lower = filename.lower()
+        with st.expander(tr("🔍 Preview Material"), expanded=False):
+            if filename_lower.endswith((".png", ".jpg", ".jpeg")):
+                try:
+                    st.image(data, width=500)
+                except Exception:
+                    st.warning(tr("Preview not available for this image."))
+            elif filename_lower.endswith((".txt", ".py", ".csv", ".json", ".md")):
+                try:
+                    st.code(data.decode("utf-8", errors="replace"), language="python" if filename_lower.endswith(".py") else "text")
+                except Exception:
+                    st.warning(tr("Could not read text preview."))
+            elif filename_lower.endswith(".pdf"):
+                import base64
+                b64_pdf = base64.b64encode(data).decode('utf-8')
+                # Render PDF inline using an object tag with a fallback text link
+                pdf_object_html = f'''
+                    <object data="data:application/pdf;base64,{b64_pdf}" type="application/pdf" width="100%" height="600px" style="border-radius:8px;">
+                        <p style="color:white;padding:10px;">Your browser does not support embedded PDFs. Please use the download button below.</p>
+                    </object>
+                '''
+                st.markdown(pdf_object_html, unsafe_allow_html=True)
+            else:
+                st.info(tr("Direct preview is not available for this file type."))
+        # ---------------------------------------
 
-        if filename_lower.endswith((".png", ".jpg", ".jpeg")):
-            try:
-                st.image(data, width=500)
-            except Exception:
-                st.warning(tr("Preview not available for this image."))
-
-        elif filename_lower.endswith((".txt", ".py", ".csv", ".json", ".md")):
-            try:
-                st.code(
-                    data.decode("utf-8", errors="replace"),
-                    language="python" if filename_lower.endswith(".py") else "text",
-                )
-            except Exception:
-                st.warning(tr("Could not read text preview."))
-
-        elif filename_lower.endswith(".pdf"):
-            try:
-                st.pdf(
-                    data,
-                    height=700,
-                    key=f"material_pdf_preview_{mid}",
-                )
-            except Exception:
-                st.warning(tr("Preview not available — use the download button."))
-
-            st.download_button(
-                tr("⬇️ Download {0}").format(filename),
-                data=data,
-                file_name=filename,
-                mime="application/pdf",
-                key=f"material_pdf_download_{mid}",
-            )
-
-        else:
-            st.info(tr("Direct preview is not available for this file type."))
+        # FIXED: Added a unique suffix to the key to prevent duplicate element key errors
+        st.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
+                           key=f"dlm_file_{mid}_{m.get('path', '')}", **STRETCH)
 # ------------------------------------------------------------------ teachers / admin: upload + manage
 def render_materials_manager(store, user):
     banner(tr("📤 Upload Study Materials"),
