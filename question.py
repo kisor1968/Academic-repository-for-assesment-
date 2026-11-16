@@ -238,6 +238,7 @@ BN = {
     "A submission already exists for this roll number in this test. Please contact your faculty if this is a mistake.": "এই পরীক্ষায় এই রোল নম্বরে আগেই একটি জমা আছে। ভুল হয়ে থাকলে শিক্ষকের সঙ্গে যোগাযোগ করুন।",
     "⏰ Time was up, so your answers were submitted automatically.": "⏰ সময় শেষ হয়ে যাওয়ায় আপনার উত্তর স্বয়ংক্রিয়ভাবে জমা হয়েছে।",
     "⚠️ This submission arrived after the deadline and has been marked as late.": "⚠️ এই জমা শেষ সময়ের পরে এসেছে, তাই এটি দেরিতে জমা হিসেবে চিহ্নিত হয়েছে।",
+    "🔍 Preview Material": "🔍 সামগ্রী প্রিভিউ দেখুন",
     "Your result will appear under **My Report Card** after your teacher finishes the evaluation.": "শিক্ষক মূল্যায়ন শেষ করলে আপনার ফলাফল **আমার রিপোর্ট কার্ড** পাতায় দেখা যাবে।",
     "Assessment: {0}": "মূল্যায়ন: {0}",
     "You have not submitted any test yet.": "আপনি এখনও কোনো পরীক্ষা জমা দেননি।",
@@ -3285,6 +3286,28 @@ def render_study_materials(store):
     if data is None:
         st.warning(tr("File is missing in storage."))
     else:
+        # --- PREVIEW SECTION ADDITION ---
+        filename_lower = m["filename"].lower()
+        with st.expander(tr("🔍 Preview Material"), expanded=False):
+            if filename_lower.endswith((".png", ".jpg", ".jpeg")):
+                try:
+                    st.image(data, width=500)
+                except Exception:
+                    st.warning(tr("Preview not available for this image."))
+            elif filename_lower.endswith(".pdf"):
+                import base64
+                b64_pdf = base64.b64encode(data).decode('utf-8')
+                pdf_display = f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="600px" type="application/pdf"></iframe>'
+                st.markdown(pdf_display, unsafe_allow_html=True)
+            elif filename_lower.endswith((".txt", ".py", ".csv", ".json", ".md")):
+                try:
+                    st.code(data.decode("utf-8", errors="replace"), language="python" if filename_lower.endswith(".py") else "text")
+                except Exception:
+                    st.warning(tr("Could not read text preview."))
+            else:
+                st.info(tr("Direct preview is not available for this file type. Please use the download button below."))
+        # ---------------------------------
+
         st.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
                            key=f"dlm_{mid}", **STRETCH)
 
