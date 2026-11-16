@@ -30,12 +30,14 @@ import secrets
 import tempfile
 import threading
 import time
+import zipfile
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from functools import wraps
 from pathlib import Path
 from urllib.parse import quote
 from html import escape as html_escape
+from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
 
 import pandas as pd
@@ -406,6 +408,31 @@ BN = {
     "Title cannot be empty.": "শিরোনাম ফাঁকা রাখা যাবে না।",
     "Updated.": "হালনাগাদ হয়েছে।",
     "Deleted.": "মুছে ফেলা হয়েছে।",
+    "Page": "পাতা",
+    "of {0} page(s)": "মোট {0}টি পাতা",
+    "Slide": "স্লাইড",
+    "🔗 Open the full PDF in a new tab": "🔗 পুরো PDF নতুন ট্যাবে খুলুন",
+    "Preview not available for this PDF (it may be password-protected or damaged). Please download it.": "এই PDF-এর প্রিভিউ দেখানো যাচ্ছে না (এতে পাসওয়ার্ড থাকতে পারে বা ফাইলটি নষ্ট)। অনুগ্রহ করে ডাউনলোড করুন।",
+    "Preview not available for this image.": "এই ছবির প্রিভিউ দেখানো যাচ্ছে না।",
+    "Showing the text only (pictures and formatting are not shown).": "শুধু লেখা দেখানো হচ্ছে (ছবি ও ফরম্যাটিং দেখানো হয় না)।",
+    "Direct preview is not available for this file type.": "এই ধরনের ফাইলের সরাসরি প্রিভিউ পাওয়া যায় না।",
+    "🔤 Bengali writing helper — type in English letters, get Bengali": "🔤 বাংলা লেখার সহায়ক — ইংরেজি অক্ষরে টাইপ করুন, বাংলা পান",
+    "Added. Check the field in the form below.": "যোগ হয়েছে। নিচের ফর্মের ঘরটি দেখুন।",
+    "⌨️ Phonetic typing": "⌨️ ফোনেটিক টাইপিং",
+    "🌐 Translate English → Bengali": "🌐 ইংরেজি → বাংলা অনুবাদ",
+    "Type the Bengali words in English letters. Put English words or formulas in {curly braces} to keep them unchanged.": "বাংলা শব্দ ইংরেজি অক্ষরে টাইপ করুন। ইংরেজি শব্দ বা সূত্র অপরিবর্তিত রাখতে সেগুলো {curly braces}-এর মধ্যে লিখুন।",
+    "Type here (English letters)": "এখানে টাইপ করুন (ইংরেজি অক্ষরে)",
+    "Write numbers in Bengali digits (০১২৩…)": "সংখ্যা বাংলা অঙ্কে লিখুন (০১২৩…)",
+    "Turn a full stop into । ": "দাঁড়ি (.) কে । করুন",
+    "**Bengali result** (press the copy icon, or use the button below):": "**বাংলা ফলাফল** (কপি আইকন চাপুন, অথবা নিচের বোতাম ব্যবহার করুন):",
+    "Put the Bengali text into": "বাংলা লেখাটি যে ঘরে বসবে",
+    "➕ Add to this field": "➕ এই ঘরে যোগ করুন",
+    "📋 Typing guide": "📋 টাইপিং নির্দেশিকা",
+    "Machine translation by Google Translate. The English text is sent over the internet. Always read and correct the result before using it.": "Google Translate-এর যান্ত্রিক অনুবাদ। ইংরেজি লেখাটি ইন্টারনেটের মাধ্যমে পাঠানো হয়। ব্যবহারের আগে ফলাফল পড়ে সংশোধন করে নিন।",
+    "English text": "ইংরেজি লেখা",
+    "🌐 Translate": "🌐 অনুবাদ করুন",
+    "Please type some English text first.": "আগে কিছু ইংরেজি লেখা টাইপ করুন।",
+    "The translation service could not be reached. Please use phonetic typing instead.": "অনুবাদ সেবার সঙ্গে যোগাযোগ করা যায়নি। অনুগ্রহ করে ফোনেটিক টাইপিং ব্যবহার করুন।",
     "🖨️ Printable report card — English + বাংলা (HTML)": "🖨️ ছাপার উপযোগী রিপোর্ট কার্ড — English + বাংলা (HTML)",
     "Use the HTML version if the name or remarks are in Bengali: open it, then Print → Save as PDF.": "নাম বা মন্তব্য বাংলায় থাকলে HTML সংস্করণটি ব্যবহার করুন: খুলে Print → Save as PDF করুন।",
     "**Faculty accounts in {0}:** {1}": "**{0} বিভাগের শিক্ষক অ্যাকাউন্ট:** {1}",
@@ -1097,6 +1124,21 @@ class SupabaseBackend:
     def delete_file(self, key):
         self._req("DELETE", self._obj(key), ok=(400, 404))
 
+    def signed_url(self, key, expires=3600):
+        """Temporary link to a private file (None if Supabase cannot create one)."""
+        r = self._req("POST", f"/storage/v1/object/sign/{self.BUCKET}/{quote(key, safe='/')}", ok=(400, 404),
+                      json={"expiresIn": int(expires)})
+        if r.status_code != 200:
+            return None
+        path = r.json().get("signedURL") or r.json().get("signedUrl")
+        if not path:
+            return None
+        if path.startswith("http"):
+            return path
+        if not path.startswith("/storage/v1"):
+            path = "/storage/v1" + (path if path.startswith("/") else "/" + path)
+        return self.url + path
+
     # ---- audit log (one tiny row per event, ordered by key)
     def log(self, line):
         key = f"audit/{datetime.now(timezone.utc):%Y%m%d%H%M%S%f}-{secrets.token_hex(2)}"
@@ -1317,6 +1359,17 @@ class DeptStore:
         if not m or not m.get("path", "").startswith("materials/") or ".." in m["path"]:
             return None
         return self.b.get_file(self._fprefix + m["path"])
+
+    def material_link(self, mid, expires=3600):
+        """Temporary link that opens the stored file in a new browser tab (None on local disk or on any problem)."""
+        m = self.get_material(mid)
+        if not m or not m.get("path", "").startswith("materials/") or ".." in m["path"]:
+            return None
+        make = getattr(self.b, "signed_url", None)
+        try:
+            return make(self._fprefix + m["path"], expires) if make else None
+        except Exception:
+            return None
 
 
     # ---------------- tests (named assessments with a window, timer and question selection) ----------------
@@ -3242,6 +3295,90 @@ def _material_bytes(dept, mid, stamp):
     return DeptStore(dept).read_material(mid)
 
 
+# ------------------------------------------------------------------ preview (PDF pages, images, text, Word, PowerPoint)
+@st.cache_data(max_entries=40, ttl=900, show_spinner=False)
+def _pdf_page(dept, mid, stamp, page):
+    """(PNG of one PDF page, total pages). `page` is 0-based. Drawn on the server, so it works in every browser."""
+    data = _material_bytes(dept, mid, stamp)
+    try:
+        import pypdfium2 as pdfium
+        pdf = pdfium.PdfDocument(data)
+        n = len(pdf)
+        img = pdf[min(page, n - 1)].render(scale=1.5).to_pil()
+    except ImportError:                              # fall back to poppler (packages.txt) when pypdfium2 is missing
+        from pdf2image import convert_from_bytes, pdfinfo_from_bytes
+        n = int(pdfinfo_from_bytes(data)["Pages"])
+        img = convert_from_bytes(data, dpi=110, first_page=page + 1, last_page=page + 1)[0]
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="PNG", optimize=True)
+    return buf.getvalue(), n
+
+
+@st.cache_data(max_entries=40, ttl=300, show_spinner=False)
+def _material_link(dept, mid, stamp):
+    return DeptStore(dept).material_link(mid)
+
+
+def _office_text(data, kind):
+    """Plain text of a .docx / .pptx (no pictures or layout). Returns '' when nothing can be read."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            if sum(i.file_size for i in z.infolist()) > 40 * 1024 * 1024:      # refuse zip bombs
+                return ""
+            if kind == "docx":
+                ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+                root = ET.fromstring(z.read("word/document.xml"))
+                paras = ["".join(t.text or "" for t in p.iter(ns + "t")) for p in root.iter(ns + "p")]
+                return "\n\n".join(p for p in paras if p.strip())
+            ns = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+            names = sorted((n for n in z.namelist() if re.fullmatch(r"ppt/slides/slide\d+\.xml", n)),
+                           key=lambda n: int(re.search(r"(\d+)", n.rsplit("/", 1)[-1]).group(1)))
+            out = []
+            for i, n in enumerate(names, 1):
+                text = " ".join(t.text or "" for t in ET.fromstring(z.read(n)).iter(ns + "t")).strip()
+                out.append(f"[{tr('Slide')} {i}]  {text}")
+            return "\n\n".join(out)
+    except Exception:
+        return ""
+
+
+def _preview(store, m, mid, data):
+    name = m["filename"].lower()
+    ext = name.rsplit(".", 1)[-1] if "." in name else ""
+    if ext == "pdf":
+        try:
+            _, n = _pdf_page(store.dept, mid, m["uploaded_at"], 0)
+            page = 1
+            if n > 1:
+                c1, c2 = st.columns([1, 3])
+                page = c1.number_input(tr("Page"), 1, n, 1, key=f"pv_pg_{mid}_{lang()}")
+                c2.markdown("<br>", unsafe_allow_html=True)
+                c2.caption(trf("of {0} page(s)", n))
+            png, _ = _pdf_page(store.dept, mid, m["uploaded_at"], int(page) - 1)
+            st.image(png)
+        except Exception:
+            st.warning(tr("Preview not available for this PDF (it may be password-protected or damaged). Please download it."))
+        link = _material_link(store.dept, mid, m["uploaded_at"])
+        if link:
+            st.link_button(tr("🔗 Open the full PDF in a new tab"), link)
+    elif ext in ("png", "jpg", "jpeg"):
+        try:
+            st.image(data, width=700)
+        except Exception:
+            st.warning(tr("Preview not available for this image."))
+    elif ext in ("txt", "py", "csv", "json", "md"):
+        st.code(data.decode("utf-8", errors="replace")[:20000], language="python" if ext == "py" else "text")
+    elif ext in ("docx", "pptx"):
+        text = _office_text(data, ext)
+        if text:
+            st.caption(tr("Showing the text only (pictures and formatting are not shown)."))
+            st.code(text[:12000], language="text", wrap_lines=True)
+        else:
+            st.info(tr("Direct preview is not available for this file type."))
+    else:
+        st.info(tr("Direct preview is not available for this file type."))
+
+
 # ------------------------------------------------------------------ students (and everyone): browse + download
 def render_study_materials(store):
     banner(tr("📚 Study Materials & Syllabus"),
@@ -3286,36 +3423,12 @@ def render_study_materials(store):
     if data is None:
         st.warning(tr("File is missing in storage."))
     else:
-        # --- SAFE PREVIEW & DOWNLOAD SECTION ---
-        filename_lower = m["filename"].lower()
-        with st.expander(tr("🔍 Preview Material"), expanded=False):
-            if filename_lower.endswith((".png", ".jpg", ".jpeg")):
-                try:
-                    st.image(data, width=500)
-                except Exception:
-                    st.warning(tr("Preview not available for this image."))
-            elif filename_lower.endswith((".txt", ".py", ".csv", ".json", ".md")):
-                try:
-                    st.code(data.decode("utf-8", errors="replace"), language="python" if filename_lower.endswith(".py") else "text")
-                except Exception:
-                    st.warning(tr("Could not read text preview."))
-            elif filename_lower.endswith(".pdf"):
-                import base64
-                b64_pdf = base64.b64encode(data).decode('utf-8')
-                # Render PDF inline using an object tag with a fallback text link
-                pdf_object_html = f'''
-                    <object data="data:application/pdf;base64,{b64_pdf}" type="application/pdf" width="100%" height="600px" style="border-radius:8px;">
-                        <p style="color:white;padding:10px;">Your browser does not support embedded PDFs. Please use the download button below.</p>
-                    </object>
-                '''
-                st.markdown(pdf_object_html, unsafe_allow_html=True)
-            else:
-                st.info(tr("Direct preview is not available for this file type."))
-        # ---------------------------------------
-
-        # FIXED: Added a unique suffix to the key to prevent duplicate element key errors
+        with st.expander(tr("🔍 Preview Material"), expanded=True):
+            _preview(store, m, mid, data)
         st.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
                            key=f"dlm_file_{mid}_{m.get('path', '')}", **STRETCH)
+
+
 # ------------------------------------------------------------------ teachers / admin: upload + manage
 def render_materials_manager(store, user):
     banner(tr("📤 Upload Study Materials"),
@@ -3849,6 +3962,158 @@ def render_reviews(user):
 
 
 # ======================================================================
+# VIEWS/BENGALI — Bengali writing helper for teachers: phonetic typing (English letters -> Bengali script) and optional online translation.
+# ======================================================================
+# Capital letters are different sounds: T/D/N = retroflex ট/ড/ণ, O = ও/ো, I = ঈ, U = ঊ, S... see the cheat sheet below.
+CONSONANTS = {
+    "k": "ক", "kh": "খ", "g": "গ", "gh": "ঘ", "Ng": "ঙ", "c": "চ", "ch": "ছ", "chh": "ছ", "j": "জ", "jh": "ঝ", "NG": "ঞ",
+    "T": "ট", "Th": "ঠ", "D": "ড", "Dh": "ঢ", "N": "ণ", "t": "ত", "th": "থ", "d": "দ", "dh": "ধ", "n": "ন",
+    "p": "প", "ph": "ফ", "f": "ফ", "b": "ব", "bh": "ভ", "v": "ভ", "m": "ম", "z": "য", "y": "য়", "r": "র", "l": "ল",
+    "sh": "শ", "Sh": "ষ", "s": "স", "h": "হ", "R": "ড়", "Rh": "ঢ়",
+    "q": "ক", "kSh": "ক্ষ", "kkh": "ক্ষ", "GY": "জ্ঞ", "x": "ক্স",
+}
+SIGNS = {"ng": "ং", ":": "ঃ", "^": "ঁ", "``": "ৎ"}          # never join into a conjunct
+VOWELS = {                                                     # token: (independent letter, vowel sign after a consonant)
+    "a": ("আ", "া"), "i": ("ই", "ি"), "I": ("ঈ", "ী"), "u": ("উ", "ু"), "U": ("ঊ", "ূ"),
+    "rri": ("ঋ", "ৃ"), "e": ("এ", "ে"), "oi": ("ঐ", "ৈ"), "OI": ("ঐ", "ৈ"), "O": ("ও", "ো"),
+    "ou": ("ঔ", "ৌ"), "OU": ("ঔ", "ৌ"), "o": ("অ", ""),     # plain "o" is the inherent vowel: no sign after a consonant
+}
+DIGITS = str.maketrans("0123456789", "০১২৩৪৫৬৭৮৯")
+_TOKENS = sorted(set(CONSONANTS) | set(SIGNS) | set(VOWELS), key=len, reverse=True)
+_HASANTA = "্"
+
+
+def to_bengali(text, digits=False, danda=True):
+    """Phonetic Roman -> Bengali. Text inside {curly braces} is kept exactly as typed (for English words / formulas)."""
+    out, i, n, after_consonant = [], 0, len(text), False
+    while i < n:
+        ch = text[i]
+        if ch == "{":                                   # literal English segment
+            j = text.find("}", i + 1)
+            if j == -1:
+                j = n
+            out.append(text[i + 1:j])
+            after_consonant, i = False, j + 1
+            continue
+        tok = next((t for t in _TOKENS if text.startswith(t, i)), None)
+        if tok is None:
+            if danda and ch == "." and (i + 1 >= n or text[i + 1].isspace()) and not (out and out[-1][-1:].isdigit()):
+                out.append("।")
+            else:
+                out.append(ch.translate(DIGITS) if digits else ch)
+            after_consonant, i = False, i + 1
+            continue
+        i += len(tok)
+        if tok in SIGNS:
+            out.append(SIGNS[tok]); after_consonant = False
+        elif tok in VOWELS:
+            indep, sign = VOWELS[tok]
+            out.append(sign if after_consonant else indep); after_consonant = False
+        else:                                           # consonant
+            letter = CONSONANTS[tok]
+            if after_consonant:
+                out.append(_HASANTA)
+                if tok == "y":                          # য-ফলা inside a conjunct: দ্য, ব্য ...
+                    letter = "য"
+            out.append(letter); after_consonant = True
+    return "".join(out)
+
+
+CHEAT_SHEET = """
+| Type | Get | Type | Get | Type | Get |
+|---|---|---|---|---|---|
+| a | া / আ | i | ি / ই | I | ী / ঈ |
+| u | ু / উ | U | ূ / ঊ | e | ে / এ |
+| o | (silent) / অ | O | ো / ও | oi | ৈ / ঐ |
+| ou | ৌ / ঔ | rri | ৃ / ঋ | ng | ং |
+| k kh g gh | ক খ গ ঘ | Ng | ঙ | c ch (chh) j jh | চ ছ জ ঝ |
+| T Th D Dh N | ট ঠ ড ঢ ণ | t th d dh n | ত থ দ ধ ন | p ph b bh m | প ফ ব ভ ম |
+| z y r l | য য় র ল | sh Sh s h | শ ষ স হ | R Rh | ড় ঢ় |
+| kSh / kkh | ক্ষ | GY | জ্ঞ | `` : ^ | ৎ ঃ ঁ |
+"""
+EXAMPLES = "ami bhalObasi → আমি ভালোবাসি · bangla → বাংলা · proshno → প্রশ্ন · bidyaloy → বিদ্যালয় · uttor → উত্তর · tOmar nam ki? → তোমার নাম কি?"
+
+
+# ---------------------------------------------------------------------------- online translation (optional)
+def parse_translation(payload):
+    """Joins the sentence pieces of a Google-Translate style response."""
+    return "".join(seg[0] for seg in payload[0] if seg and seg[0]).strip()
+
+
+@st.cache_data(ttl=3600, max_entries=50, show_spinner=False)
+def translate_en_bn(text):
+    r = requests.get("https://translate.googleapis.com/translate_a/single",
+                     params={"client": "gtx", "sl": "en", "tl": "bn", "dt": "t", "q": text[:2000]}, timeout=12)
+    r.raise_for_status()
+    return parse_translation(r.json())
+
+
+# ---------------------------------------------------------------------------- the helper panel
+def _insert(target_key, text):
+    cur = ss.get(target_key, "") or ""
+    ss[target_key] = (cur + (" " if cur and not cur.endswith((" ", "\n")) else "") + text).strip()
+    ss["bn_added"] = True
+
+
+def _use_buttons(prefix, text, targets):
+    """Choose a field of the 'Add question' form and append the Bengali text to it."""
+    c1, c2 = st.columns([2, 1])
+    key = c1.selectbox(tr("Put the Bengali text into"), list(targets), key=f"{prefix}_target_{lang()}_{'_'.join(targets)}",
+                       format_func=lambda k: tr(targets[k]))
+    c2.button(tr("➕ Add to this field"), key=f"{prefix}_add", on_click=_insert, args=(key, text), disabled=not text, **STRETCH)
+
+
+def render_bengali_helper(targets):
+    """targets: {session_state key of a form field: label}. Shown inside the Question Creator."""
+    with st.expander(tr("🔤 Bengali writing helper — type in English letters, get Bengali")):
+        if ss.pop("bn_added", False):
+            st.success(tr("Added. Check the field in the form below."))
+        t_type, t_tr = st.tabs([tr("⌨️ Phonetic typing"), tr("🌐 Translate English → Bengali")])
+        with t_type:
+            st.caption(tr("Type the Bengali words in English letters. Put English words or formulas in {curly braces} to keep them unchanged."))
+            src = st.text_area(tr("Type here (English letters)"), key="bn_src", height=110,
+                               placeholder="ami bhalObasi {Physics}. proshno 1: bidyut ki?")
+            c1, c2 = st.columns(2)
+            digits = c1.checkbox(tr("Write numbers in Bengali digits (০১২৩…)"), key="bn_digits")
+            danda = c2.checkbox(tr("Turn a full stop into । "), value=True, key="bn_danda")
+            result = to_bengali(src, digits=digits, danda=danda) if src.strip() else ""
+            st.markdown(tr("**Bengali result** (press the copy icon, or use the button below):"))
+            st.code(result or " ", language=None, wrap_lines=True) if hasattr(st, "code") else None
+            _use_buttons("bnp", result, targets)
+            with st.expander(tr("📋 Typing guide")):
+                st.markdown(CHEAT_SHEET)
+                st.caption(EXAMPLES)
+        with t_tr:
+            st.caption(tr("Machine translation by Google Translate. The English text is sent over the internet. "
+                          "Always read and correct the result before using it."))
+            eng = st.text_area(tr("English text"), key="bn_eng", height=110)
+            if st.button(tr("🌐 Translate"), key="bn_translate", **STRETCH):
+                if not eng.strip():
+                    st.error(tr("Please type some English text first."))
+                else:
+                    try:
+                        ss["bn_translated"] = translate_en_bn(eng.strip())
+                    except Exception:  # network blocked, service changed, rate limit ...
+                        ss.pop("bn_translated", None)
+                        st.error(tr("The translation service could not be reached. Please use phonetic typing instead."))
+            if ss.get("bn_translated"):
+                st.code(ss["bn_translated"], language=None, wrap_lines=True)
+                _use_buttons("bnt", ss["bn_translated"], targets)
+
+
+def _bengali_helper_panel():
+    """Builds the list of 'Add New Question' fields the helper may fill, matching the question type chosen below."""
+    ver = ss.setdefault("new_q_ver", 0)
+    qtype = ss.get(f"ntype_{ver}_{lang()}", "mcq")
+    targets = {f"nprompt_{ver}": "Question Prompt", f"nid_{ver}": "Identifier / Topic tag (optional)"}
+    if qtype == "mcq":
+        targets.update({f"oa_{ver}": "Option A", f"ob_{ver}": "Option B", f"oc_{ver}": "Option C", f"od_{ver}": "Option D"})
+    else:
+        targets[f"nans_{ver}"] = "Reference solution / marking rubric" if qtype == "code" else "Model answer / evaluation guidelines"
+    render_bengali_helper(targets)
+
+
+# ======================================================================
 # VIEWS/CREATOR — Teacher question creator: numbering, identifiers, weightage, manager and OCR importer.
 # ======================================================================
 def _flash():
@@ -4025,6 +4290,7 @@ def _import_section(store):
 def render_creator(store):
     banner(tr("✍️ Question Creator Studio"), trf("{0} — numbering, weightage, editing and import", store.dept))
     _flash()
+    _bengali_helper_panel()
     _add_section(store)
     st.markdown("---")
     qs = _bank_overview(store)
