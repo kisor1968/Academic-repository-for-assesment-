@@ -3282,7 +3282,7 @@ def render_study_materials(store):
     if m.get("description"):
         st.info(m["description"])
     st.caption(trf("Uploaded by {0} on {1} · {2}", m.get("uploaded_by", "-"), m["uploaded_at"], _fmt_size(m["size"])))
-   data = _material_bytes(store.dept, mid, m["uploaded_at"])
+    data = _material_bytes(store.dept, mid, m["uploaded_at"])
     if data is None:
         st.warning(tr("File is missing in storage."))
     else:
@@ -3303,6 +3303,10 @@ def render_study_materials(store):
                 st.info(tr("PDF preview is available via download or direct viewer below."))
             else:
                 st.info(tr("Direct preview is not available for this file type."))
+        # ---------------------------------------
+
+        st.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
+                           key=f"dlm_{mid}", **STRETCH)
         # ---------------------------------------
 
         st.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
