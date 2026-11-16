@@ -3307,7 +3307,6 @@ def render_study_materials(store):
 
         st.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
                            key=f"dlm_{mid}", **STRETCH)
-
 # ------------------------------------------------------------------ teachers / admin: upload + manage
 def render_materials_manager(store, user):
     banner(tr("📤 Upload Study Materials"),
