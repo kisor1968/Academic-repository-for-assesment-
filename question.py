@@ -3282,11 +3282,11 @@ def render_study_materials(store):
     if m.get("description"):
         st.info(m["description"])
     st.caption(trf("Uploaded by {0} on {1} · {2}", m.get("uploaded_by", "-"), m["uploaded_at"], _fmt_size(m["size"])))
-    data = _material_bytes(store.dept, mid, m["uploaded_at"])
+   data = _material_bytes(store.dept, mid, m["uploaded_at"])
     if data is None:
         st.warning(tr("File is missing in storage."))
     else:
-        # --- SAFE PREVIEW SECTION ---
+        # --- SAFE PREVIEW & DOWNLOAD SECTION ---
         filename_lower = m["filename"].lower()
         with st.expander(tr("🔍 Preview Material"), expanded=False):
             if filename_lower.endswith((".png", ".jpg", ".jpeg")):
@@ -3300,31 +3300,10 @@ def render_study_materials(store):
                 except Exception:
                     st.warning(tr("Could not read text preview."))
             elif filename_lower.endswith(".pdf"):
-                # Safe client-side open button that avoids Chrome data-URI iframe blocks
-                import base64
-                b64 = base64.b64encode(data).decode('utf-8')
-                pdf_html = f'''
-                    <script>
-                    function openPdf_{mid}() {{
-                        const byteCharacters = atob("{b64}");
-                        const byteNumbers = new Array(byteCharacters.length);
-                        for (let i = 0; i < byteCharacters.length; i++) {{
-                            byteNumbers[i] = byteCharacters.charCodeAt(i);
-                        }}
-                        const byteArray = new Uint8Array(byteNumbers);
-                        const blob = new Blob([byteArray], {{type: 'application/pdf'}});
-                        const blobUrl = URL.createObjectURL(blob);
-                        window.open(blobUrl, '_blank');
-                    }}
-                    </script>
-                    <button onclick="openPdf_{mid}()" style="background:#7b2ff7;color:white;border:none;padding:10px 18px;border-radius:10px;cursor:pointer;font-weight:600;">
-                        📂 Open PDF in New Tab / Viewer
-                    </button>
-                '''
-                components.html(pdf_html, height=60)
+                st.info(tr("PDF preview is available via download or direct viewer below."))
             else:
-                st.info(tr("Direct preview is not available for this file type. Please use the download button below."))
-        # ----------------------------
+                st.info(tr("Direct preview is not available for this file type."))
+        # ---------------------------------------
 
         st.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
                            key=f"dlm_{mid}", **STRETCH)
