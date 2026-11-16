@@ -31,6 +31,7 @@ import tempfile
 import threading
 import time
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from functools import wraps
@@ -433,6 +434,12 @@ BN = {
     "🌐 Translate": "🌐 অনুবাদ করুন",
     "Please type some English text first.": "আগে কিছু ইংরেজি লেখা টাইপ করুন।",
     "The translation service could not be reached. Please use phonetic typing instead.": "অনুবাদ সেবার সঙ্গে যোগাযোগ করা যায়নি। অনুগ্রহ করে ফোনেটিক টাইপিং ব্যবহার করুন।",
+    "Fetching Bengali suggestions…": "বাংলা শব্দের পরামর্শ আনা হচ্ছে…",
+    "Google suggestions could not be reached - showing our own conversion and the typed word only.": "Google-এর পরামর্শ পাওয়া যায়নি - শুধু আমাদের নিজস্ব রূপান্তর ও টাইপ করা শব্দ দেখানো হচ্ছে।",
+    "Only the first {0} words get a chooser; the rest use our own conversion.": "প্রথম {0}টি শব্দের জন্য তালিকা দেখানো হচ্ছে; বাকিগুলো আমাদের নিজস্ব রূপান্তর ব্যবহার করবে।",
+    "**Choose the Bengali word for each typed word** (the first option is selected by default):": "**প্রতিটি টাইপ করা শব্দের জন্য সঠিক বাংলা শব্দ বেছে নিন** (প্রথম বিকল্পটি আগে থেকেই নির্বাচিত):",
+    "🧹 Forget remembered choices": "🧹 মনে রাখা পছন্দ মুছুন",
+    "Suggest Bengali words from Google (the typed words are sent to Google over the internet)": "Google থেকে বাংলা শব্দের পরামর্শ নিন (টাইপ করা শব্দ ইন্টারনেটের মাধ্যমে Google-এ পাঠানো হয়)",
     "🖨️ Printable report card — English + বাংলা (HTML)": "🖨️ ছাপার উপযোগী রিপোর্ট কার্ড — English + বাংলা (HTML)",
     "Use the HTML version if the name or remarks are in Bengali: open it, then Print → Save as PDF.": "নাম বা মন্তব্য বাংলায় থাকলে HTML সংস্করণটি ব্যবহার করুন: খুলে Print → Save as PDF করুন।",
     "**Faculty accounts in {0}:** {1}": "**{0} বিভাগের শিক্ষক অ্যাকাউন্ট:** {1}",
@@ -3996,6 +4003,9 @@ def to_bengali(text, digits=False, danda=True):
             after_consonant, i = False, j + 1
             continue
         tok = next((t for t in _TOKENS if text.startswith(t, i)), None)
+        if tok is None and ch.isascii() and ch.isupper():   # capital with no special meaning (B, K, P, A ...): treat as lower case
+            text = text[:i] + ch.lower() + text[i + 1:]
+            continue
         if tok is None:
             if danda and ch == "." and (i + 1 >= n or text[i + 1].isspace()) and not (out and out[-1][-1:].isdigit()):
                 out.append("।")
@@ -4048,6 +4058,130 @@ def translate_en_bn(text):
     return parse_translation(r.json())
 
 
+# ---------------------------------------------------------------------------- word-by-word chooser (Google Input Tools + our own conversion)
+GOOGLE_INPUT_URL = "https://inputtools.google.com/request"   # the service behind Google's Bengali typing
+GOOGLE_INPUT_ITC = "bn-t-i0-und"                             # Bengali transliteration
+BN_MAX_CHOOSER_WORDS = 200                                   # more words than this fall back to our own conversion
+_G_CACHE, _G_LOCK = {}, threading.Lock()
+_WORD_TOKEN_RX = re.compile(r"\{[^}]*\}?|[A-Za-z][A-Za-z:^`]*|\s+|\d+|.", re.S)
+
+
+def _google_fetch(word):
+    """Bengali candidates for one Roman word, best first. Raises if the service cannot be reached (so failures are never cached)."""
+    with _G_LOCK:
+        if word in _G_CACHE:
+            return _G_CACHE[word]
+    r = requests.get(GOOGLE_INPUT_URL, timeout=6, params={
+        "text": word, "itc": GOOGLE_INPUT_ITC, "num": 6, "cp": 0, "cs": 1, "ie": "utf-8", "oe": "utf-8", "app": "demopage"})
+    r.raise_for_status()
+    data = r.json()
+    result = tuple(c for c in data[1][0][1] if isinstance(c, str)) if data and data[0] == "SUCCESS" else ()
+    with _G_LOCK:
+        if len(_G_CACHE) > 5000:
+            _G_CACHE.clear()
+        _G_CACHE[word] = result
+    return result
+
+
+def google_suggest_many(words):
+    """{word: tuple of candidates} for all words (looked up in parallel), plus True if any lookup failed."""
+    def one(w):
+        try:
+            return w, _google_fetch(w)
+        except Exception:                      # offline, blocked, rate limit, format change ...
+            return w, None
+    found, failed = {}, False
+    if words:
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            for w, res in ex.map(one, words):
+                if res is None:
+                    failed = True
+                else:
+                    found[w] = res
+    return found, failed
+
+
+def tokenize_for_chooser(text):
+    """Splits typed text into ('word' | 'lit' | 'num' | 'space' | 'punct', text). {curly} segments are literal."""
+    toks = []
+    for m in _WORD_TOKEN_RX.finditer(text):
+        t = m.group(0)
+        if t.startswith("{"):
+            toks.append(("lit", t[1:-1] if t.endswith("}") else t[1:]))
+        elif t[0].isascii() and t[0].isalpha():
+            toks.append(("word", t))
+        elif t.isspace():
+            toks.append(("space", t))
+        elif t.isdigit():
+            toks.append(("num", t))
+        else:
+            toks.append(("punct", t))
+    return toks
+
+
+def word_candidates(word, google=()):
+    """Dropdown options for one word: Google's suggestions first, then our phonetic conversion, then the word as typed."""
+    options = []
+    for c in list(google or ()) + [to_bengali(word, danda=False), word]:
+        if c and c not in options:
+            options.append(c)
+    return options
+
+
+def assemble_chosen(toks, picks, digits=False, danda=True):
+    """Joins the chosen Bengali words with the original spaces, numbers, punctuation and {literal} text."""
+    out = []
+    for i, (kind, t) in enumerate(toks):
+        if kind == "word":
+            out.append(picks.get(i) or to_bengali(t, digits=digits, danda=False))
+        elif kind == "num":
+            out.append(t.translate(DIGITS) if digits else t)
+        elif kind == "punct" and t == "." and danda \
+                and (i + 1 >= len(toks) or toks[i + 1][0] == "space") \
+                and not (i > 0 and toks[i - 1][1][-1:].isdigit()):
+            out.append("।")
+        else:
+            out.append(t)
+    return "".join(out)
+
+
+def _forget_choices():
+    ss.pop("bn_pref", None)
+    for k in [k for k in ss.keys() if str(k).startswith("bnw_")]:
+        del ss[k]
+
+
+def word_chooser(src, digits=False, danda=True, use_google=True):
+    """Draws one dropdown per typed word and returns the Bengali text built from the teacher's choices."""
+    toks = tokenize_for_chooser(src)
+    words = [(i, t) for i, (k, t) in enumerate(toks) if k == "word"][:BN_MAX_CHOOSER_WORDS]
+    google, failed = {}, False
+    if use_google and words:
+        lookups = sorted({t.lower() for _, t in words if re.fullmatch(r"[A-Za-z]+", t)})
+        with st.spinner(tr("Fetching Bengali suggestions…")):
+            google, failed = google_suggest_many(lookups)
+    if failed:
+        st.warning(tr("Google suggestions could not be reached - showing our own conversion and the typed word only."))
+    if len([1 for k, _ in toks if k == "word"]) > len(words):
+        st.info(trf("Only the first {0} words get a chooser; the rest use our own conversion.", BN_MAX_CHOOSER_WORDS))
+    pref = ss.setdefault("bn_pref", {})            # remembers the choice made for a typed word during this session
+    picks = {}
+    if words:
+        st.markdown(tr("**Choose the Bengali word for each typed word** (the first option is selected by default):"))
+    for row in range(0, len(words), 3):
+        cols = st.columns(3)
+        for col, (i, t) in zip(cols, words[row:row + 3]):
+            opts = word_candidates(t, google.get(t.lower(), ()))
+            idx = opts.index(pref[t]) if pref.get(t) in opts else 0
+            with col:
+                choice = st.selectbox(t, opts, index=idx, key=f"bnw_{i}_{t}")
+            picks[i] = choice
+            pref[t] = choice
+    if words:
+        st.button(tr("🧹 Forget remembered choices"), key="bn_forget", on_click=_forget_choices)
+    return assemble_chosen(toks, picks, digits=digits, danda=danda)
+
+
 # ---------------------------------------------------------------------------- the helper panel
 def _insert(target_key, text):
     cur = ss.get(target_key, "") or ""
@@ -4076,7 +4210,9 @@ def render_bengali_helper(targets):
             c1, c2 = st.columns(2)
             digits = c1.checkbox(tr("Write numbers in Bengali digits (০১২৩…)"), key="bn_digits")
             danda = c2.checkbox(tr("Turn a full stop into । "), value=True, key="bn_danda")
-            result = to_bengali(src, digits=digits, danda=danda) if src.strip() else ""
+            use_google = st.checkbox(tr("Suggest Bengali words from Google (the typed words are sent to Google over the internet)"),
+                                     value=True, key="bn_use_google")
+            result = word_chooser(src, digits=digits, danda=danda, use_google=use_google) if src.strip() else ""
             st.markdown(tr("**Bengali result** (press the copy icon, or use the button below):"))
             st.code(result or " ", language=None, wrap_lines=True) if hasattr(st, "code") else None
             _use_buttons("bnp", result, targets)
