@@ -4214,7 +4214,7 @@ def render_bengali_helper(targets):
                                      value=True, key="bn_use_google")
             result = word_chooser(src, digits=digits, danda=danda, use_google=use_google) if src.strip() else ""
             st.markdown(tr("**Bengali result** (press the copy icon, or use the button below):"))
-            st.code(result or " ", language=None, wrap_lines=True) if hasattr(st, "code") else None
+            st.code(result or " ", language=None, wrap_lines=True)
             _use_buttons("bnp", result, targets)
             with st.expander(tr("📋 Typing guide")):
                 st.markdown(CHEAT_SHEET)
