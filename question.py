@@ -2997,32 +2997,21 @@ def _preview_files(a):
             st.code(f["bytes"].decode("utf-8", errors="replace")[:5000], language="python")
 
         elif name.endswith(".pdf"):
-            import base64
-
-            b64pdf = base64.b64encode(f["bytes"]).decode("ascii")
-
-            pdf_object_html = f"""
-            <object
-                data="data:application/pdf;base64,{b64pdf}"
-                type="application/pdf"
-                width="100%"
-                height="650px"
-                style="border-radius:8px;">
-                <p style="color:white;padding:10px;">
-                    Your browser does not support embedded PDFs.
-                    Please use the download button below.
-                </p>
-            </object>
-            """
-
-            st.markdown(pdf_object_html, unsafe_allow_html=True)
+            try:
+                st.pdf(
+                    f["bytes"],
+                    height=650,
+                    key=f"preview_pdf_{slot}_{f['name']}",
+                )
+            except Exception:
+                st.warning(tr("Preview not available for this file (it will still be submitted)."))
 
             st.download_button(
                 "⬇️ Download PDF",
                 data=f["bytes"],
                 file_name=f["name"],
                 mime="application/pdf",
-                key=f"preview_pdf_{slot}_{f['name']}",
+                key=f"download_pdf_{slot}_{f['name']}",
             )
 
         else:
