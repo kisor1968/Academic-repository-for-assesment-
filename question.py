@@ -3302,8 +3302,9 @@ def render_study_materials(store):
             elif filename_lower.endswith(".pdf"):
                 import base64
                 b64_pdf = base64.b64encode(data).decode('utf-8')
-                pdf_display = f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="500px" type="application/pdf" style="border:none; border-radius:10px;"></iframe>'
-                st.markdown(pdf_display, unsafe_allow_html=True)
+                # Creates a direct data-URI link that users can click to open or save immediately
+                pdf_link = f'<a href="data:application/pdf;base64,{b64_pdf}" target="_blank" style="display:inline-block;background:#531413;color:white;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;">📄 Click here to Open/View PDF in Browser Tab</a>'
+                st.markdown(pdf_link, unsafe_allow_html=True)
             else:
                 st.info(tr("Direct preview is not available for this file type."))
         # ---------------------------------------
