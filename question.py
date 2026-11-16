@@ -3310,7 +3310,7 @@ def render_study_materials(store):
     else:
         # --- SAFE PREVIEW & DOWNLOAD SECTION ---
         filename_lower = m["filename"].lower()
-            with st.expander(tr("🔍 Preview Material"), expanded=False):
+    with st.expander(tr("🔍 Preview Material"), expanded=False):
         filename_lower = filename.lower()
 
         if filename_lower.endswith((".png", ".jpg", ".jpeg")):
