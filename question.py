@@ -3300,7 +3300,10 @@ def render_study_materials(store):
                 except Exception:
                     st.warning(tr("Could not read text preview."))
             elif filename_lower.endswith(".pdf"):
-                st.info(tr("PDF preview is available via download or direct viewer below."))
+                import base64
+                b64_pdf = base64.b64encode(data).decode('utf-8')
+                pdf_display = f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="500px" type="application/pdf" style="border:none; border-radius:10px;"></iframe>'
+                st.markdown(pdf_display, unsafe_allow_html=True)
             else:
                 st.info(tr("Direct preview is not available for this file type."))
         # ---------------------------------------
