@@ -2989,8 +2989,10 @@ def _timer(deadline):
 
 # ------------------------------------------------------------------ step 1: answer
 def _question_header(q):
+    # Do not pass the question body through str.format: LaTeX uses braces extensively.
+    st.markdown(f"#### Q{html_escape(str(q['number']))}.")
+    st.markdown(q["question"])
     tag = f" · _{q['identifier']}_" if q.get("identifier") else ""
-    st.markdown(trf("#### Q{0}. {1}", q['number'], q['question']))
     st.caption(trf("{0:g} mark(s) · {1}{2}", q['max_marks'], QUESTION_TYPES.get(q['type'], q['type']), tag))
 
 
@@ -4257,6 +4259,21 @@ def _flash():
         st.success(tr(ss.pop("form_success")))
 
 
+def _math_input_help():
+    st.caption(
+        "Mathematical notation is supported using LaTeX. Examples: "
+        r"`$x^2$`, `$\frac{a}{b}$`, `$\sqrt{x}$`, `$\int_0^1 f(x)\,dx$`, "
+        r"`$\alpha+\beta$`. Use `$$ ... $$` for a centred display equation. "
+        "The same notation is rendered for students and in question previews."
+    )
+
+
+def _math_preview(label, value, key):
+    if value and value.strip():
+        with st.expander(label, expanded=False):
+            st.markdown(value, help=None)
+
+
 def _add_section(store):
     st.markdown(tr("#### ➕ Add New Question"))
     ver = ss.setdefault("new_q_ver", 0)
@@ -4272,13 +4289,30 @@ def _add_section(store):
     marks = c3.number_input(tr("Max Marks"), min_value=0.5, max_value=100.0, step=0.5,
                             value=DEFAULT_MARKS[qtype], key=k(f"nmarks_{qtype}"))
 
-    prompt = st.text_area(tr("Question Prompt"), placeholder=tr("Enter question text…"), key=k("nprompt"))
+    _math_input_help()
+    prompt = st.text_area(tr("Question Prompt"), placeholder=tr("Enter question text…"), key=k("nprompt"),
+                          height=160, help="Enter ordinary text and LaTeX math in the same field.")
+    math_expr = st.text_area(
+        "Mathematical expression / equation (LaTeX)",
+        placeholder=r"Examples: \frac{a}{b}    x^2+y^2=z^2    \int_0^1 f(x)\,dx",
+        key=k("nmath"), height=90,
+        help="Enter LaTeX here; it will be added as a display equation below the question text."
+    )
+    combined_prompt = prompt.strip()
+    if math_expr.strip():
+        expr = math_expr.strip()
+        if not (expr.startswith("$$") or expr.startswith(r"\[") or expr.startswith(r"\(") or expr.startswith("$")):
+            expr = "$$\n" + expr + "\n$$"
+        combined_prompt = (combined_prompt + "\n\n" + expr).strip()
+    _math_preview("Preview question / mathematical notation", combined_prompt, k("nprompt"))
     options, answer = [], ""
     if qtype == "mcq":
         a, b = st.columns(2)
         raw = [a.text_input(tr("Option A"), key=k("oa")), b.text_input(tr("Option B"), key=k("ob")),
                a.text_input(tr("Option C"), key=k("oc")), b.text_input(tr("Option D"), key=k("od"))]
         options = [o.strip() for o in raw if o.strip()]
+        for i, option in enumerate(options):
+            _math_preview(f"Option {i + 1} preview", option, f"{k('optpreview')}_{i}")
         if options:
             answer = st.selectbox(tr("Correct Option"), options, key=k("ocorrect"))
         else:
@@ -4287,10 +4321,10 @@ def _add_section(store):
         answer = st.text_area(tr("Reference solution / marking rubric"), key=k("nans"),
                               placeholder=tr("Expected logic, test cases, rubric…"))
     else:
-        answer = st.text_area(tr("Model answer / evaluation guidelines"), key=k("nans"))
+        answer = st.text_area(tr("Model answer / evaluation guidelines"), key=k("nans"), height=120)
 
     if st.button(tr("💾 Save Question to Bank"), type="primary", **STRETCH):
-        if not prompt.strip():
+        if not combined_prompt:
             st.error(tr("Question prompt cannot be empty."))
         elif not number.strip():
             st.error(tr("Please give the question a number / identifier."))
@@ -4301,7 +4335,7 @@ def _add_section(store):
         else:
             store.add_question({
                 "number": number.strip(), "identifier": identifier.strip(), "type": qtype,
-                "question": prompt.strip(), "options": options if qtype == "mcq" else [],
+                "question": combined_prompt, "options": options if qtype == "mcq" else [],
                 "answer": answer.strip(), "max_marks": float(marks),
             })
             ss["form_success"] = f"Saved Question {number.strip()} ({marks:g} marks)."
@@ -4340,7 +4374,8 @@ def _edit_section(store, qs):
         number = c1.text_input(tr("Question No."), value=q["number"])
         identifier = c2.text_input(tr("Identifier / Topic"), value=q["identifier"])
         marks = c3.number_input(tr("Max Marks"), min_value=0.5, max_value=100.0, step=0.5, value=float(q["max_marks"]))
-        prompt = st.text_area(tr("Prompt"), value=q["question"])
+        st.caption("LaTeX mathematics is supported: use `$x^2$`, `\\frac{a}{b}`, `\\sqrt{x}`, `\\int`, `\\alpha`, or `$$ ... $$` for display equations.")
+        prompt = st.text_area(tr("Prompt"), value=q["question"], height=160)
         opts_text = None
         if q["type"] == "mcq":
             opts_text = st.text_area(tr("Options (one per line)"), value="\n".join(q["options"]))
@@ -4376,51 +4411,209 @@ def _edit_section(store, qs):
             st.warning(tr("Tick **Confirm deletion** first."))
 
 
+def _normalise_ocr_math(text):
+    """Conservative OCR clean-up: retain text while repairing common OCR math glyphs."""
+    replacements = {
+        "\u2212": "-", "\u2013": "-", "\u2014": "-", "\u00d7": r"\\times ",
+        "\u00f7": r"\\div ", "\u2264": r"\\leq ", "\u2265": r"\\geq ",
+        "\u2260": r"\\ne ", "\u03c0": r"\\pi ", "\u03b1": r"\\alpha ",
+        "\u03b2": r"\\beta ", "\u03b8": r"\\theta ", "\u221e": r"\\infty ",
+        "\u221a": r"\\sqrt{}", "\u222b": r"\\int ",
+        "\u222b": r"\\int ", "\u2202": r"\\partial ",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    # Tesseract commonly reads superscript digits as ordinary digits after a variable.
+    # Apply only to common single-letter mathematical variables.
+    text = re.sub(r"\b([A-Za-z])\s*([²³])", lambda m: m.group(1) + "^" + ("2" if m.group(2) == "²" else "3"), text)
+    return text
+
+
+def _ocr_image(image, pytesseract):
+    """Upscale and enhance a scanned page before OCR."""
+    from PIL import ImageOps, ImageEnhance, ImageFilter
+    image = ImageOps.exif_transpose(image).convert("L")
+    image = ImageOps.autocontrast(image)
+    if image.width < 2200:
+        scale = min(3.0, 2200 / max(1, image.width))
+        image = image.resize((int(image.width * scale), int(image.height * scale)))
+    image = ImageEnhance.Contrast(image).enhance(1.6)
+    image = image.filter(ImageFilter.SHARPEN)
+    # Preserve layout/newlines: they are used to identify numbered questions and subparts.
+    return pytesseract.image_to_string(image, config="--oem 3 --psm 6")
+
+
+def _extract_question_paper(data, filename):
+    """Extract selectable PDF text when available; otherwise OCR each rendered page."""
+    import pytesseract
+    from PIL import Image
+    from io import BytesIO
+
+    pages = []
+    if filename.lower().endswith(".pdf"):
+        # PyMuPDF renders scanned PDFs without requiring a separately installed Poppler binary.
+        try:
+            import fitz
+            pdf = fitz.open(stream=data, filetype="pdf")
+            for page in pdf:
+                native = (page.get_text("text") or "").strip()
+                # A scanned page can contain a tiny header/footer text layer but no questions.
+                if len(re.sub(r"\s", "", native)) >= 35:
+                    pages.append(native)
+                else:
+                    pix = page.get_pixmap(matrix=fitz.Matrix(3, 3), alpha=False)
+                    image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    pages.append(_ocr_image(image, pytesseract))
+            return "\n\n".join(pages)
+        except ImportError:
+            pass
+
+        # Portable fallback for installations using pdf2image + Poppler.
+        try:
+            from pdf2image import convert_from_bytes
+            return "\n\n".join(_ocr_image(img, pytesseract) for img in convert_from_bytes(data, dpi=300))
+        except Exception as exc:
+            raise RuntimeError(
+                "PDF rendering requires PyMuPDF (recommended: add `pymupdf` to requirements.txt) "
+                "or pdf2image with Poppler installed."
+            ) from exc
+    else:
+        image = Image.open(BytesIO(data))
+        return _ocr_image(image, pytesseract)
+
+
+def _split_ocr_questions(text):
+    """Split numbered questions and (a)/(b) subquestions while keeping equation lines."""
+    text = _normalise_ocr_math(text.replace("\r", "\n"))
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+    lines = [line for line in lines if line]
+    items, parent, active_no, active_lines = [], None, None, []
+
+    def flush():
+        nonlocal active_no, active_lines
+        body = "\n".join(active_lines).strip()
+        body = re.sub(r"\s+(?:\d+\s*\+\s*\d+)\s*$", "", body).strip()
+        if active_no is not None and body:
+            items.append((active_no, body))
+        active_no, active_lines = None, []
+
+    for line in lines:
+        main = re.match(r"^(\d{1,3}|II|IH|Il|Hl|HI|H1|I{1,3})\s*[.)]\s*(.*)$", line, re.I)
+        if main:
+            flush()
+            raw_parent = main.group(1).upper()
+            parent = {"I": "1", "II": "2", "III": "3", "IH": "11", "IL": "11", "HL": "11", "HI": "11", "H1": "11"}.get(raw_parent, raw_parent)
+            rest = main.group(2).strip()
+            inline_sub = re.match(r"^\(?([a-h])\)\s*(.*)$", rest, re.I)
+            if inline_sub:
+                active_no = f"{parent}({inline_sub.group(1).lower()})"
+                if inline_sub.group(2):
+                    active_lines.append(inline_sub.group(2))
+            else:
+                active_no = parent
+                if rest:
+                    active_lines.append(rest)
+            continue
+
+        sub = re.match(r"^\(?([a-h])\)\s*(.*)$", line, re.I)
+        if sub and parent is not None:
+            flush()
+            active_no = f"{parent}({sub.group(1).lower()})"
+            if sub.group(2):
+                active_lines.append(sub.group(2))
+            continue
+
+        if active_no is not None:
+            active_lines.append(line)
+    flush()
+    return [(n, q.strip()) for n, q in items if q.strip()]
+
+
 def _import_section(store):
     st.markdown(tr("#### 📄 Smart PDF / Scanned Image Importer"))
-    up = st.file_uploader(tr("Upload Question Paper"), type=DOC_EXTS, key="import_file")
+    st.caption(
+        "Upload a text-based or scanned PDF, JPG or JPEG. Scanned pages are rendered at high resolution "
+        "and OCR-processed. Mathematical OCR is not perfectly reliable, so you can correct the extracted "
+        "LaTeX/text before importing."
+    )
+    up = st.file_uploader(tr("Upload Question Paper"), type=["pdf", "png", "jpg", "jpeg"], key="import_file")
     c1, c2 = st.columns(2)
     default_marks = c1.number_input(tr("Marks per imported question"), 0.5, 100.0, 5.0, 0.5)
     itype = c2.selectbox(tr("Import as type"), ["long", "short", "code"], format_func=lambda c: tr(QUESTION_TYPES[c]))
-    if up is None or not st.button(tr("🚀 Process & Import Questions"), **STRETCH):
+    if up is None:
         return
-    try:
-        import pypdf, pytesseract, platform
-        from pdf2image import convert_from_bytes
-        from PIL import Image
-    except ImportError as e:
-        st.error(trf("Importer needs extra packages: {0}. See requirements.txt.", e))
-        return
-    if platform.system() == "Windows":
-        pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    with st.spinner(tr("Extracting and structuring text…")):
+
+    if st.button(tr("🚀 Process & Import Questions"), **STRETCH):
         try:
-            data, text = up.getvalue(), ""
-            if up.name.lower().endswith(".pdf"):
-                for page in pypdf.PdfReader(io.BytesIO(data)).pages:
-                    text += (page.extract_text() or "") + "\n"
-                if not text.strip():
-                    text = "\n".join(pytesseract.image_to_string(img) for img in convert_from_bytes(data))
-            else:
-                text = pytesseract.image_to_string(Image.open(io.BytesIO(data)))
-            if not text.strip():
+            with st.spinner(tr("Extracting and structuring text…")):
+                extracted = _extract_question_paper(up.getvalue(), up.name)
+            if not extracted.strip():
                 st.error(tr("OCR could not extract readable text."))
                 return
-            added = 0
-            for block in re.split(r"\n\s*(?=\d+[.)]\s)", text):
-                block = block.strip()
-                if not block:
-                    continue
-                m = re.match(r"(\d+)[.)]\s+", block)
-                number = store.free_number(m.group(1) if m else None)
-                store.add_question({"number": number, "identifier": "", "type": itype,
-                                    "question": block[m.end():] if m else block, "options": [],
-                                    "answer": "Faculty review guideline.", "max_marks": float(default_marks)})
-                added += 1
-            ss["form_success"] = f"Imported {added} questions ({default_marks:g} marks each) — review their numbers and marks below."
-            st.rerun()
-        except Exception as e:  # noqa: BLE001 - show any OCR/PDF failure to the teacher
+            ss.pop("import_review_text", None)
+            ss.pop("import_preview_items", None)
+            ss["import_extracted_text"] = extracted
+            ss["import_extracted_name"] = up.name
+            ss["import_extracted_type"] = itype
+            ss["import_extracted_marks"] = float(default_marks)
+        except ImportError as e:
+            st.error(trf("Importer needs extra packages: {0}. See requirements.txt.", e))
+            return
+        except Exception as e:
             st.error(trf("Import error: {0}", e))
+            return
+
+    extracted = ss.get("import_extracted_text")
+    if not extracted:
+        return
+
+    st.markdown("**Review and correct the extracted text before creating questions.**")
+    st.caption(
+        r"Use LaTeX for unclear formulae, for example `$\sin^2 x$`, `$\frac{x^3}{3!}$`, "
+        r"`$\frac{ds}{dt}=e^{-t}$`, `$\begin{bmatrix}1&2\\3&4\end{bmatrix}$`."
+    )
+    reviewed = st.text_area(
+        "Extracted question paper text (editable)",
+        value=extracted,
+        height=360,
+        key="import_review_text",
+    )
+    if st.button("Preview questions detected", key="preview_import_questions"):
+        parsed = _split_ocr_questions(reviewed)
+        ss["import_preview_items"] = parsed
+    parsed = ss.get("import_preview_items", [])
+    if parsed:
+        st.write(f"Detected **{len(parsed)}** question/subquestion(s).")
+        for qno, body in parsed:
+            with st.expander(f"Question {qno}", expanded=False):
+                st.markdown(body)
+    if st.button("Import reviewed questions into Question Bank", type="primary", key="confirm_import_questions"):
+        parsed = _split_ocr_questions(reviewed)
+        if not parsed:
+            st.warning("No numbered questions were detected. Add question numbers (e.g. 8. or 8(a)) and preview again.")
+            return
+        added, skipped = 0, []
+        for qno, body in parsed:
+            number = qno
+            if store.number_exists(number):
+                skipped.append(number)
+                continue
+            store.add_question({
+                "number": number, "identifier": "Imported — review mathematical notation",
+                "type": ss.get("import_extracted_type", itype),
+                "question": body, "options": [],
+                "answer": "Faculty review required. Verify mathematical symbols and notation against the original paper.",
+                "max_marks": float(ss.get("import_extracted_marks", default_marks)),
+            })
+            added += 1
+        ss.pop("import_extracted_text", None)
+        ss.pop("import_preview_items", None)
+        ss.pop("import_review_text", None)
+        ss["form_success"] = (
+            f"Imported {added} question(s). Check every formula against the original scan before publishing."
+            + (f" Skipped duplicate numbers: {', '.join(skipped)}." if skipped else "")
+        )
+        st.rerun()
 
 
 def render_creator(store):
