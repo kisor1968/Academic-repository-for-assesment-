@@ -3305,12 +3305,9 @@ def render_study_materials(store):
                 st.info(tr("Direct preview is not available for this file type."))
         # ---------------------------------------
 
+        # FIXED: Added a unique suffix to the key to prevent duplicate element key errors
         st.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
-                           key=f"dlm_{mid}", **STRETCH)
-        # ---------------------------------------
-
-        st.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
-                           key=f"dlm_{mid}", **STRETCH)
+                           key=f"dlm_file_{mid}_{m.get('path', '')}", **STRETCH)
 # ------------------------------------------------------------------ teachers / admin: upload + manage
 def render_materials_manager(store, user):
     banner(tr("📤 Upload Study Materials"),
