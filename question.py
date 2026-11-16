@@ -3288,34 +3288,55 @@ def render_study_materials(store):
     else:
         # --- SAFE PREVIEW & DOWNLOAD SECTION ---
         filename_lower = m["filename"].lower()
-        with st.expander(tr("🔍 Preview Material"), expanded=False):
-            if filename_lower.endswith((".png", ".jpg", ".jpeg")):
-                try:
-                    st.image(data, width=500)
-                except Exception:
-                    st.warning(tr("Preview not available for this image."))
-            elif filename_lower.endswith((".txt", ".py", ".csv", ".json", ".md")):
-                try:
-                    st.code(data.decode("utf-8", errors="replace"), language="python" if filename_lower.endswith(".py") else "text")
-                except Exception:
-                    st.warning(tr("Could not read text preview."))
-            elif filename_lower.endswith(".pdf"):
-                import base64
-                b64_pdf = base64.b64encode(data).decode('utf-8')
-                # Render PDF inline using an object tag with a fallback text link
-                pdf_object_html = f'''
-                    <object data="data:application/pdf;base64,{b64_pdf}" type="application/pdf" width="100%" height="600px" style="border-radius:8px;">
-                        <p style="color:white;padding:10px;">Your browser does not support embedded PDFs. Please use the download button below.</p>
-                    </object>
-                '''
-                st.markdown(pdf_object_html, unsafe_allow_html=True)
-            else:
-                st.info(tr("Direct preview is not available for this file type."))
-        # ---------------------------------------
+        with st.expander("🔍 Preview Material", expanded=False):
+    filename_lower = filename.lower()
 
-        # FIXED: Added a unique suffix to the key to prevent duplicate element key errors
-        st.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
-                           key=f"dlm_file_{mid}_{m.get('path', '')}", **STRETCH)
+    if filename_lower.endswith((".png", ".jpg", ".jpeg")):
+        try:
+            st.image(data, width=500)
+        except Exception:
+            st.warning("Preview not available for this image.")
+
+    elif filename_lower.endswith((".txt", ".py", ".csv", ".json", ".md")):
+        try:
+            st.code(
+                data.decode("utf-8", errors="replace"),
+                language="python" if filename_lower.endswith(".py") else "text",
+            )
+        except Exception:
+            st.warning("Could not read text preview.")
+
+    elif filename_lower.endswith(".pdf"):
+        import base64
+
+        b64pdf = base64.b64encode(data).decode("ascii")
+
+        pdf_object_html = f"""
+        <object
+            data="data:application/pdf;base64,{b64pdf}"
+            type="application/pdf"
+            width="100%"
+            height="650px"
+            style="border-radius:8px;">
+            <p style="color:white;padding:10px;">
+                Your browser does not support embedded PDFs.
+                Please use the download button below.
+            </p>
+        </object>
+        """
+
+        st.markdown(pdf_object_html, unsafe_allow_html=True)
+
+        st.download_button(
+            "⬇️ Download PDF",
+            data=data,
+            file_name=filename,
+            mime="application/pdf",
+            key=f"pdf_preview_{filename}",
+        )
+
+    else:
+        st.info("Direct preview is not available for this file type.")
 # ------------------------------------------------------------------ teachers / admin: upload + manage
 def render_materials_manager(store, user):
     banner(tr("📤 Upload Study Materials"),
