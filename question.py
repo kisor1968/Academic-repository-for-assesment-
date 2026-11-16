@@ -3286,7 +3286,7 @@ def render_study_materials(store):
     if data is None:
         st.warning(tr("File is missing in storage."))
     else:
-        # --- PREVIEW SECTION ADDITION ---
+        # --- SAFE PREVIEW SECTION ---
         filename_lower = m["filename"].lower()
         with st.expander(tr("🔍 Preview Material"), expanded=False):
             if filename_lower.endswith((".png", ".jpg", ".jpeg")):
@@ -3294,19 +3294,37 @@ def render_study_materials(store):
                     st.image(data, width=500)
                 except Exception:
                     st.warning(tr("Preview not available for this image."))
-            elif filename_lower.endswith(".pdf"):
-                import base64
-                b64_pdf = base64.b64encode(data).decode('utf-8')
-                pdf_display = f'<iframe src="data:application/pdf;base64,{b64_pdf}" width="100%" height="600px" type="application/pdf"></iframe>'
-                st.markdown(pdf_display, unsafe_allow_html=True)
             elif filename_lower.endswith((".txt", ".py", ".csv", ".json", ".md")):
                 try:
                     st.code(data.decode("utf-8", errors="replace"), language="python" if filename_lower.endswith(".py") else "text")
                 except Exception:
                     st.warning(tr("Could not read text preview."))
+            elif filename_lower.endswith(".pdf"):
+                # Safe client-side open button that avoids Chrome data-URI iframe blocks
+                import base64
+                b64 = base64.b64encode(data).decode('utf-8')
+                pdf_html = f'''
+                    <script>
+                    function openPdf_{mid}() {{
+                        const byteCharacters = atob("{b64}");
+                        const byteNumbers = new Array(byteCharacters.length);
+                        for (let i = 0; i < byteCharacters.length; i++) {{
+                            byteNumbers[i] = byteCharacters.charCodeAt(i);
+                        }}
+                        const byteArray = new Uint8Array(byteNumbers);
+                        const blob = new Blob([byteArray], {{type: 'application/pdf'}});
+                        const blobUrl = URL.createObjectURL(blob);
+                        window.open(blobUrl, '_blank');
+                    }}
+                    </script>
+                    <button onclick="openPdf_{mid}()" style="background:#7b2ff7;color:white;border:none;padding:10px 18px;border-radius:10px;cursor:pointer;font-weight:600;">
+                        📂 Open PDF in New Tab / Viewer
+                    </button>
+                '''
+                components.html(pdf_html, height=60)
             else:
                 st.info(tr("Direct preview is not available for this file type. Please use the download button below."))
-        # ---------------------------------
+        # ----------------------------
 
         st.download_button(trf("⬇️ Download {0}", m["filename"]), data, file_name=m["filename"],
                            key=f"dlm_{mid}", **STRETCH)
