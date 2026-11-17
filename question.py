@@ -69,7 +69,7 @@ DEPARTMENTS = [
     "Bengali", "English", "Philosophy", "Political Science", "History", "Geography",
     "Sanskrit", "Economics", "Sociology", "Education", "Physics", "Chemistry",
     "Mathematics", "Electronics", "Computer Science", "Botany", "Zoology",
-    "Food & Nutrition", "Commerce", "Library Science", "IDC", "CVAC", "AECC",
+    "Food & Nutrition", "Commerce", "Library Science",
 ]
 
 QUESTION_TYPES = {
@@ -780,9 +780,6 @@ DEPT_BN = {
     "Food & Nutrition": "খাদ্য ও পুষ্টিবিজ্ঞান",
     "Commerce": "বাণিজ্য",
     "Library Science": "গ্রন্থাগার বিজ্ঞান",
-    "IDC": "আইডিসি", 
-    "CVAC": "সিভ্যাক", 
-    "AECC": "AECC", 
 }
 
 
@@ -1963,7 +1960,11 @@ def show_df(df, container=None):
     for col in d.columns:
         if d[col].dtype == object:
             d[col] = d[col].map(lambda v: tr(v) if v in ("PASS", "FAIL", "MCQ", "SHORT", "LONG", "CODE") else v)
-    (container or st).dataframe(d, hide_index=True)
+    # Marks are displayed to one decimal place; stored/calculated values remain unchanged.
+    marks_columns = [c for c in d.columns if str(c).strip().lower() in
+                     {"marks", "max", "obtained", "marks awarded", "পূর্ণমান", "নম্বর", "প্রাপ্ত নম্বর"}]
+    number_config = {c: st.column_config.NumberColumn(format="%.1f") for c in marks_columns}
+    (container or st).dataframe(d, hide_index=True, column_config=number_config or None)
 
 P_TESTS = "🧪 Tests"
 P_ROSTER = "👥 Students"
@@ -2075,7 +2076,7 @@ def build_report_pdf(sub, dept):
         rows.append([
             Paragraph(clean(q["number"]), body), Paragraph(topic, body),
             Paragraph(clean(QUESTION_TYPES.get(q["type"], q["type"]).split(" ")[0]), body),
-            f"{q['max_marks']:g}", f"{awarded:g}",
+            f"{q['max_marks']:.1f}", f"{awarded:.1f}",
             Paragraph(clean(sub.get("remarks", {}).get(qid, "")), body),
         ])
     rows.append(["", Paragraph("<b>TOTAL</b>", body), "", f"{t['max']:g}", f"{t['obtained']:g}", ""])
@@ -2142,7 +2143,7 @@ def build_report_html(sub, dept):
         got = min(float(sub["marks"].get(qid, 0) or 0), float(q["max_marks"]))
         topic = (f"<b>{e(q['identifier'])}</b><br>" if q.get("identifier") else "") + e(q["question"][:160] + ("…" if len(q["question"]) > 160 else ""))
         rows += (f"<tr><td>{e(q['number'])}</td><td>{topic}</td><td>{e(q['type'].upper())}</td>"
-                 f"<td class='c'>{q['max_marks']:g}</td><td class='c'>{got:g}</td><td>{e(sub.get('remarks', {}).get(qid, ''))}</td></tr>")
+                 f"<td class='c'>{q['max_marks']:.1f}</td><td class='c'>{got:.1f}</td><td>{e(sub.get('remarks', {}).get(qid, ''))}</td></tr>")
     rows += (f"<tr class='tot'><td></td><td><b>{lab('TOTAL', 'মোট')}</b></td><td></td>"
              f"<td class='c'>{t['max']:g}</td><td class='c'>{t['obtained']:g}</td><td></td></tr>")
     result = "<b class='ok'>PASS / পাস</b>" if t["passed"] else "<b class='bad'>FAIL / ফেল</b>"
@@ -2996,7 +2997,7 @@ def _question_header(q):
     st.markdown(f"#### Q{html_escape(str(q['number']))}.")
     st.markdown(q["question"])
     tag = f" · _{q['identifier']}_" if q.get("identifier") else ""
-    st.caption(trf("{0:g} mark(s) · {1}{2}", q['max_marks'], QUESTION_TYPES.get(q['type'], q['type']), tag))
+    st.caption(trf("{0:.1f} mark(s) · {1}{2}", q['max_marks'], QUESTION_TYPES.get(q['type'], q['type']), tag))
 
 
 def _file_slot(q, slot, label, types):
@@ -3202,7 +3203,7 @@ def _show_report(store, sub):
     if sub.get("test_title"):
         st.caption(trf("Assessment: {0}", sub["test_title"]))
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric(tr("Marks"), f"{t['obtained']:g} / {t['max']:g}")
+    c1.metric(tr("Marks"), f"{t['obtained']:.1f} / {t['max']:.1f}")
     c2.metric(tr("Percentage"), f"{t['percent']:.1f}%")
     c3.metric(tr("Grade"), t["grade"])
     c4.metric(tr("Result"), tr("PASS ✅") if t["passed"] else tr("FAIL ❌"))
@@ -3230,7 +3231,7 @@ def _render_my_results(store, student):
         fin = s["status"] == "finalized"
         rows.append({"Test": s.get("test_title") or "—", "Submitted": s["timestamp"][:16],
                      "Status": tr("Finalised") if fin else tr("Pending"),
-                     "Marks": f"{t['obtained']:g} / {t['max']:g}" if fin else "—",
+                     "Marks": f"{t['obtained']:.1f} / {t['max']:.1f}" if fin else "—",
                      "Percent": round(t["percent"], 1) if fin else None, "Grade": t["grade"] if fin else "—"})
         if fin:
             done.append((s, t))
@@ -3367,7 +3368,41 @@ def _preview(store, m, mid, data):
                 c2.markdown("<br>", unsafe_allow_html=True)
                 c2.caption(trf("of {0} page(s)", n))
             png, _ = _pdf_page(store.dept, mid, m["uploaded_at"], int(page) - 1)
-            st.image(png)
+            st.image(png, caption=trf("Page {0}", int(page)))
+
+            # Let readers save one page or a selection of pages as image snapshots.
+            with st.expander(tr("📸 Save page screenshot(s)"), expanded=False):
+                selected_pages = st.multiselect(
+                    tr("Choose page(s) to save"),
+                    options=list(range(1, n + 1)),
+                    default=[int(page)],
+                    key=f"mat_screenshot_pages_{mid}_{lang()}",
+                )
+                if selected_pages:
+                    if len(selected_pages) == 1:
+                        shot, _ = _pdf_page(store.dept, mid, m["uploaded_at"], selected_pages[0] - 1)
+                        st.download_button(
+                            tr("⬇️ Download page as PNG"), shot,
+                            file_name=f"{Path(m['filename']).stem}_page_{selected_pages[0]}.png",
+                            mime="image/png", key=f"mat_shot_png_{mid}_{selected_pages[0]}",
+                            **STRETCH,
+                        )
+                    else:
+                        shots = io.BytesIO()
+                        with zipfile.ZipFile(shots, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                            for selected_page in selected_pages:
+                                page_png, _ = _pdf_page(store.dept, mid, m["uploaded_at"], selected_page - 1)
+                                archive.writestr(
+                                    f"{Path(m['filename']).stem}_page_{selected_page}.png", page_png
+                                )
+                        st.download_button(
+                            tr("⬇️ Download selected pages as PNGs (ZIP)"), shots.getvalue(),
+                            file_name=f"{Path(m['filename']).stem}_selected_pages.zip",
+                            mime="application/zip", key=f"mat_shot_zip_{mid}_{lang()}",
+                            **STRETCH,
+                        )
+                else:
+                    st.caption(tr("Select at least one page to enable downloading."))
         except Exception:
             st.warning(tr("Preview not available for this PDF (it may be password-protected or damaged). Please download it."))
         link = _material_link(store.dept, mid, m["uploaded_at"])
@@ -3556,8 +3591,8 @@ def _editor(store, prefix, test=None):
     instr = st.text_area(tr("Instructions for students (optional)"), value=t.get("instructions", ""), key=k("instr"))
     default = [i for i in t.get("question_ids", list(by_id)) if i in by_id]
     chosen = st.multiselect(tr("Questions in this test"), list(by_id), default=default, key=k("qs"),
-                            format_func=lambda i: f"Q{by_id[i]['number']} · {by_id[i]['question'][:60]} ({by_id[i]['max_marks']:g})")
-    st.caption(trf("Total marks: {0:g}", sum(by_id[i]["max_marks"] for i in chosen)))
+                            format_func=lambda i: f"Q{by_id[i]['number']} · {by_id[i]['question'][:60]} ({by_id[i]['max_marks']:.1f})")
+    st.caption(trf("Total marks: {0:.1f}", sum(by_id[i]["max_marks"] for i in chosen)))
 
     o, c = parse_dt(t.get("open_at")), parse_dt(t.get("close_at"))
     c1, c2 = st.columns(2)
@@ -4354,7 +4389,7 @@ def _bank_overview(store):
         return qs
     c1, c2, c3 = st.columns(3)
     c1.metric(tr("Questions"), len(qs))
-    c2.metric(tr("Total Marks"), f"{sum(q['max_marks'] for q in qs):g}")
+    c2.metric(tr("Total Marks"), f"{sum(q['max_marks'] for q in qs):.1f}")
     c3.metric(tr("MCQs"), sum(q["type"] == "mcq" for q in qs))
     df = pd.DataFrame([{
         "No.": q["number"], "Identifier": q["identifier"], "Type": q["type"].upper(),
@@ -4757,7 +4792,7 @@ def render_evaluation(store, user):
     live_marks = _collect_marks(sub)[0] if not finalized else sub["marks"]
     t = totals({**sub, "marks": live_marks})
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric(tr("Marks"), f"{t['obtained']:g} / {t['max']:g}")
+    m1.metric(tr("Marks"), f"{t['obtained']:.1f} / {t['max']:.1f}")
     m2.metric(tr("Percentage"), f"{t['percent']:.1f}%")
     m3.metric(tr("Grade"), t["grade"])
     m4.metric(tr("Result"), tr("PASS") if t["passed"] else tr("FAIL"))
@@ -4765,17 +4800,17 @@ def render_evaluation(store, user):
 
     for q in sub["paper"]:
         qid = str(q["id"])
-        with st.expander(trf("Q{0} · {1:g} marks · {2}", q["number"], q["max_marks"], q["type"].upper())
+        with st.expander(trf("Q{0} · {1:.1f} marks · {2}", q["number"], q["max_marks"], q["type"].upper())
                          + (f" · {q['identifier']}" if q.get("identifier") else ""), expanded=True):
             st.markdown(f"**{q['question']}**")
             _answer_block(store, sub, q)
             if q["type"] == "mcq":
-                st.caption(trf("Auto-awarded: {0:g} / {1:g}", sub['marks'].get(qid, 0), q['max_marks']))
+                st.caption(trf("Auto-awarded: {0:.1f} / {1:.1f}", sub['marks'].get(qid, 0), q['max_marks']))
             elif finalized:
-                st.markdown(trf("**Awarded:** {0:g} / {1:g}  \n**Remark:** {2}", sub['marks'].get(qid, 0), q['max_marks'], sub.get('remarks', {}).get(qid) or '—'))
+                st.markdown(trf("**Awarded:** {0:.1f} / {1:.1f}  \n**Remark:** {2}", sub['marks'].get(qid, 0), q['max_marks'], sub.get('remarks', {}).get(qid) or '—'))
             else:
                 a, b = st.columns([1, 3])
-                a.number_input(trf("Marks (max {0:g})", q['max_marks']), 0.0, float(q["max_marks"]), step=0.5,
+                a.number_input(trf("Marks (max {0:.1f})", q['max_marks']), 0.0, float(q["max_marks"]), step=0.5,
                                value=min(float(sub["marks"].get(qid, 0.0)), float(q["max_marks"])),
                                key=f"mark_{sid}_{qid}")
                 b.text_input(tr("Faculty remark"), value=sub.get("remarks", {}).get(qid, ""),
