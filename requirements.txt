@@ -9,5 +9,6 @@ requests>=2.31.0
 tzdata
 pymupdf>=1.24.0
 pix2text
+PyMuPDF
 
 
