@@ -9,5 +9,4 @@ requests>=2.31.0
 tzdata
 pymupdf>=1.24.0
 pix2text==1.1.7
-rapidocr==3.9.2
-
+rapidocr==3.10.0
