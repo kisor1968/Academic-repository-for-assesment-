@@ -69,7 +69,7 @@ DEPARTMENTS = [
     "Bengali", "English", "Philosophy", "Political Science", "History", "Geography",
     "Sanskrit", "Economics", "Sociology", "Education", "Physics", "Chemistry",
     "Mathematics", "Electronics", "Computer Science", "Botany", "Zoology",
-    "Food & Nutrition", "Commerce", "Library Science",
+    "Food & Nutrition", "Commerce", "Library Science", "IDC", "CVAC", "AECC",
 ]
 
 QUESTION_TYPES = {
@@ -780,6 +780,9 @@ DEPT_BN = {
     "Food & Nutrition": "খাদ্য ও পুষ্টিবিজ্ঞান",
     "Commerce": "বাণিজ্য",
     "Library Science": "গ্রন্থাগার বিজ্ঞান",
+    "IDC": "আইডিসি", 
+    "CVAC": "সিভ্যাক", 
+    "AECC": "AECC", 
 }
 
 
