@@ -4498,7 +4498,11 @@ def _ocr_image_tesseract(image):
 
 @st.cache_resource(show_spinner=False)
 def _get_pix2text_engine():
-    """Load the open-source Pix2Text models once per Streamlit process, on CPU."""
+    """Load the open-source Pix2Text models once per Streamlit process, on CPU.
+
+    Deployment note: OpenCV/Pix2Text needs the Linux libGL runtime library.
+    On Streamlit Community Cloud this is provided by `libgl1` in packages.txt.
+    """
     from pix2text import Pix2Text
     return Pix2Text.from_config(device="cpu")
 
