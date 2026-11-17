@@ -8,8 +8,8 @@ Roles: students (no login) / teachers (department-scoped, password) / admin.
 First run prints a one-time `admin` password in the server log - sign in, change it, then
 create teacher accounts from the Admin Console.
 
-NOTE: data is saved in ./data . On Streamlit Community Cloud this folder is wiped on every
-restart - use a server with a persistent disk (or an external database) for real use.
+PERSISTENCE: configure SUPABASE_URL and SUPABASE_SERVICE_KEY in Streamlit Secrets.
+Without both values the app uses local ./data storage, which is ephemeral on Streamlit Cloud.
 """
 import streamlit as st
 
@@ -928,6 +928,7 @@ SETUP_SQL = """create table if not exists public.documents (
   updated_at timestamptz not null default now()
 );
 create index if not exists documents_path_prefix on public.documents (path text_pattern_ops);
+grant all on table public.documents to service_role;
 alter table public.documents enable row level security;
 -- No policies on purpose: only the secret service_role key (kept in Streamlit Secrets) can read/write."""
 
@@ -1061,7 +1062,13 @@ class SupabaseBackend:
     PAGE = 1000
 
     def __init__(self, url, key):
-        self.url = url.rstrip("/")
+        url = str(url or "").strip().rstrip("/")
+        key = str(key or "").strip()
+        if not url.startswith(("https://", "http://")):
+            raise StorageError("SUPABASE_URL must be a full https:// project URL.")
+        if not key:
+            raise StorageError("SUPABASE_SERVICE_KEY is empty.")
+        self.url = url
         self.s = requests.Session()
         self.s.headers.update({"apikey": key})
         if not key.startswith("sb_"):          # legacy JWT keys also go in the Authorization header
@@ -1183,7 +1190,15 @@ def _secret(name):
 @st.cache_resource
 def _make_backend():
     url, key = _secret("SUPABASE_URL"), _secret("SUPABASE_SERVICE_KEY")
-    return SupabaseBackend(str(url), str(key)) if url and key else LocalBackend(DATA_DIR)
+    if bool(url) != bool(key):
+        raise StorageError(
+            "Supabase is only partially configured. Add BOTH SUPABASE_URL and "
+            "SUPABASE_SERVICE_KEY to Streamlit Secrets; refusing to silently use "
+            "ephemeral local storage."
+        )
+    if url and key:
+        return SupabaseBackend(url, key)
+    return LocalBackend(DATA_DIR)
 
 
 def backend():
@@ -4539,14 +4554,14 @@ def _extract_question_paper(data, filename, engine_choice="Pix2Text (mathematica
     pages, warnings = [], []
     if filename.lower().endswith(".pdf"):
         try:
-            import fitz
-            pdf = fitz.open(stream=data, filetype="pdf")
+            import pymupdf
+            pdf = pymupdf.open(stream=data, filetype="pdf")
             for page_no, page in enumerate(pdf, 1):
                 native = (page.get_text("text") or "").strip()
                 if len(re.sub(r"\s", "", native)) >= 35:
                     pages.append(native)
                 else:
-                    pix = page.get_pixmap(matrix=fitz.Matrix(3, 3), alpha=False)
+                    pix = page.get_pixmap(matrix=pymupdf.Matrix(3, 3), alpha=False)
                     image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                     text, warning = _ocr_image(image, engine_choice)
                     pages.append(text)
