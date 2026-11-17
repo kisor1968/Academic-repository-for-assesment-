@@ -4482,8 +4482,9 @@ def _normalise_ocr_math(text):
     return text
 
 
-def _ocr_image(image, pytesseract):
-    """Upscale and enhance a scanned page before OCR."""
+def _ocr_image_tesseract(image):
+    """Upscale and enhance a scanned page before the Tesseract fallback."""
+    import pytesseract
     from PIL import ImageOps, ImageEnhance, ImageFilter
     image = ImageOps.exif_transpose(image).convert("L")
     image = ImageOps.autocontrast(image)
@@ -4492,39 +4493,73 @@ def _ocr_image(image, pytesseract):
         image = image.resize((int(image.width * scale), int(image.height * scale)))
     image = ImageEnhance.Contrast(image).enhance(1.6)
     image = image.filter(ImageFilter.SHARPEN)
-    # Preserve layout/newlines: they are used to identify numbered questions and subparts.
     return pytesseract.image_to_string(image, config="--oem 3 --psm 6")
 
 
-def _extract_question_paper(data, filename):
-    """Extract selectable PDF text when available; otherwise OCR each rendered page."""
-    import pytesseract
+@st.cache_resource(show_spinner=False)
+def _get_pix2text_engine():
+    """Load the open-source Pix2Text models once per Streamlit process, on CPU."""
+    from pix2text import Pix2Text
+    return Pix2Text.from_config(device="cpu")
+
+
+def _ocr_image_pix2text(image):
+    """Recognize page text and mathematical formulae, retaining Pix2Text LaTeX."""
+    return _get_pix2text_engine().recognize_page(image, return_text=True)
+
+
+def _ocr_image(image, engine_choice):
+    """Run the selected local OCR engine; Pix2Text falls back to Tesseract on errors."""
+    if engine_choice == "Pix2Text (mathematical OCR)":
+        try:
+            return _ocr_image_pix2text(image), None
+        except Exception as exc:
+            try:
+                return _ocr_image_tesseract(image), (
+                    "Pix2Text failed on this page; Tesseract was used instead "
+                    f"({type(exc).__name__}: {exc})"
+                )
+            except ImportError as fallback_exc:
+                raise ImportError(
+                    "Pix2Text failed and Tesseract fallback is unavailable. "
+                    "Install pix2text and pytesseract, and install the Tesseract system binary."
+                ) from fallback_exc
+    return _ocr_image_tesseract(image), None
+
+
+def _extract_question_paper(data, filename, engine_choice="Pix2Text (mathematical OCR)"):
+    """Read selectable PDF text, otherwise OCR each rendered page with the chosen engine."""
     from PIL import Image
     from io import BytesIO
 
-    pages = []
+    pages, warnings = [], []
     if filename.lower().endswith(".pdf"):
-        # PyMuPDF renders scanned PDFs without requiring a separately installed Poppler binary.
         try:
             import fitz
             pdf = fitz.open(stream=data, filetype="pdf")
-            for page in pdf:
+            for page_no, page in enumerate(pdf, 1):
                 native = (page.get_text("text") or "").strip()
-                # A scanned page can contain a tiny header/footer text layer but no questions.
                 if len(re.sub(r"\s", "", native)) >= 35:
                     pages.append(native)
                 else:
                     pix = page.get_pixmap(matrix=fitz.Matrix(3, 3), alpha=False)
                     image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                    pages.append(_ocr_image(image, pytesseract))
-            return "\n\n".join(pages)
+                    text, warning = _ocr_image(image, engine_choice)
+                    pages.append(text)
+                    if warning:
+                        warnings.append(f"Page {page_no}: {warning}")
+            return "\n\n".join(pages), warnings
         except ImportError:
             pass
 
-        # Portable fallback for installations using pdf2image + Poppler.
         try:
             from pdf2image import convert_from_bytes
-            return "\n\n".join(_ocr_image(img, pytesseract) for img in convert_from_bytes(data, dpi=300))
+            for page_no, image in enumerate(convert_from_bytes(data, dpi=300), 1):
+                text, warning = _ocr_image(image, engine_choice)
+                pages.append(text)
+                if warning:
+                    warnings.append(f"Page {page_no}: {warning}")
+            return "\n\n".join(pages), warnings
         except Exception as exc:
             raise RuntimeError(
                 "PDF rendering requires PyMuPDF (recommended: add `pymupdf` to requirements.txt) "
@@ -4532,7 +4567,10 @@ def _extract_question_paper(data, filename):
             ) from exc
     else:
         image = Image.open(BytesIO(data))
-        return _ocr_image(image, pytesseract)
+        text, warning = _ocr_image(image, engine_choice)
+        if warning:
+            warnings.append(warning)
+        return text, warnings
 
 
 def _split_ocr_questions(text):
@@ -4593,13 +4631,23 @@ def _import_section(store):
     c1, c2 = st.columns(2)
     default_marks = c1.number_input(tr("Marks per imported question"), 0.5, 100.0, 5.0, 0.5)
     itype = c2.selectbox(tr("Import as type"), ["long", "short", "code"], format_func=lambda c: tr(QUESTION_TYPES[c]))
+    engine_choice = st.selectbox(
+        "OCR engine",
+        ["Pix2Text (mathematical OCR)", "Tesseract"],
+        index=0,
+        help="Pix2Text runs locally and is optimized for mathematical formulae. "
+             "If it fails on a page, Tesseract is used automatically as a fallback.",
+        key="question_paper_ocr_engine",
+    )
     if up is None:
         return
 
     if st.button(tr("🚀 Process & Import Questions"), **STRETCH):
         try:
             with st.spinner(tr("Extracting and structuring text…")):
-                extracted = _extract_question_paper(up.getvalue(), up.name)
+                extracted, ocr_warnings = _extract_question_paper(
+                    up.getvalue(), up.name, engine_choice
+                )
             if not extracted.strip():
                 st.error(tr("OCR could not extract readable text."))
                 return
@@ -4609,6 +4657,8 @@ def _import_section(store):
             ss["import_extracted_name"] = up.name
             ss["import_extracted_type"] = itype
             ss["import_extracted_marks"] = float(default_marks)
+            ss["import_ocr_warnings"] = ocr_warnings
+            ss["import_ocr_engine"] = engine_choice
         except ImportError as e:
             st.error(trf("Importer needs extra packages: {0}. See requirements.txt.", e))
             return
@@ -4619,6 +4669,10 @@ def _import_section(store):
     extracted = ss.get("import_extracted_text")
     if not extracted:
         return
+
+    st.caption(f"OCR engine selected: {ss.get('import_ocr_engine', 'unknown')}")
+    for warning in ss.get("import_ocr_warnings", []):
+        st.warning(warning)
 
     st.markdown("**Review and correct the extracted text before creating questions.**")
     st.caption(
@@ -4662,6 +4716,8 @@ def _import_section(store):
         ss.pop("import_extracted_text", None)
         ss.pop("import_preview_items", None)
         ss.pop("import_review_text", None)
+        ss.pop("import_ocr_warnings", None)
+        ss.pop("import_ocr_engine", None)
         ss["form_success"] = (
             f"Imported {added} question(s). Check every formula against the original scan before publishing."
             + (f" Skipped duplicate numbers: {', '.join(skipped)}." if skipped else "")
