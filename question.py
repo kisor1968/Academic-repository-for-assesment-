@@ -2472,6 +2472,21 @@ input::placeholder,textarea::placeholder{color:#94a3b8 !important;-webkit-text-f
 .stApp [data-testid="stDateInput"]>div,.stApp [data-testid="stDateInput"]>div div,.stApp [data-testid="stDateInput"]>div button,
 .stApp [data-testid="stTimeInput"]>div,.stApp [data-testid="stTimeInput"]>div div{background-color:#121629 !important;}
 .stApp [data-testid="stMultiSelect"] [data-tag] button{background-color:transparent !important;}
+
+/* Study Materials: make the full-PDF link match the dark screenshot-download panel. */
+.stApp [data-testid="stLinkButton"] a{
+  background:rgba(27,10,61,.95) !important;
+  color:#ffffff !important;
+  -webkit-text-fill-color:#ffffff !important;
+  border:1px solid rgba(0,229,255,.55) !important;
+  border-radius:12px !important;
+  box-shadow:0 0 16px rgba(0,229,255,.18) !important;
+}
+.stApp [data-testid="stLinkButton"] a:hover{
+  background:linear-gradient(135deg,#24104f,#142448) !important;
+  border-color:#00e5ff !important;
+  color:#ffffff !important;
+}
 </style>
 """
 
