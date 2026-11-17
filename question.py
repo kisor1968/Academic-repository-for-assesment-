@@ -4325,7 +4325,7 @@ def _add_section(store):
                            help=tr("Printed on the paper and report card, e.g. 1, 2a, Q3"))
     identifier = c2.text_input(tr("Identifier / Topic tag (optional)"), placeholder=tr("e.g. Unit 2 – Kinematics · CO3"), key=k("nid"))
     marks = c3.number_input(tr("Max Marks"), min_value=0.5, max_value=100.0, step=0.5,
-                            value=DEFAULT_MARKS[qtype], key=k(f"nmarks_{qtype}"))
+                            value=DEFAULT_MARKS[qtype], key=k(f"nmarks_{qtype}"), format="%.1f")
 
     _math_input_help()
     prompt = st.text_area(tr("Question Prompt"), placeholder=tr("Enter question text…"), key=k("nprompt"),
@@ -4411,7 +4411,7 @@ def _edit_section(store, qs):
         c1, c2, c3 = st.columns([1, 2, 1])
         number = c1.text_input(tr("Question No."), value=q["number"])
         identifier = c2.text_input(tr("Identifier / Topic"), value=q["identifier"])
-        marks = c3.number_input(tr("Max Marks"), min_value=0.5, max_value=100.0, step=0.5, value=float(q["max_marks"]))
+        marks = c3.number_input(tr("Max Marks"), min_value=0.5, max_value=100.0, step=0.5, value=float(q["max_marks"]), format="%.1f")
         st.caption("LaTeX mathematics is supported: use `$x^2$`, `\\frac{a}{b}`, `\\sqrt{x}`, `\\int`, `\\alpha`, or `$$ ... $$` for display equations.")
         prompt = st.text_area(tr("Prompt"), value=q["question"], height=160)
         opts_text = None
