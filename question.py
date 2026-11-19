@@ -4482,34 +4482,37 @@ def _edit_section(store, qs):
 def _normalise_ocr_math(text):
     """Conservative OCR clean-up: retain text while repairing common OCR math glyphs."""
     replacements = {
-        "\u2212": "-", "\u2013": "-", "\u2014": "-", "\u00d7": r"\\times ",
-        "\u00f7": r"\\div ", "\u2264": r"\\leq ", "\u2265": r"\\geq ",
-        "\u2260": r"\\ne ", "\u03c0": r"\\pi ", "\u03b1": r"\\alpha ",
-        "\u03b2": r"\\beta ", "\u03b8": r"\\theta ", "\u221e": r"\\infty ",
-        "\u221a": r"\\sqrt{}", "\u222b": r"\\int ",
-        "\u222b": r"\\int ", "\u2202": r"\\partial ",
+        "\u2212": "-", "\u2013": "-", "\u2014": "-",
+        "\u00d7": r"\times ", "\u00f7": r"\div ",
+        "\u2264": r"\leq ", "\u2265": r"\geq ", "\u2260": r"\ne ",
+        "\u03c0": r"\pi ", "\u03b1": r"\alpha ", "\u03b2": r"\beta ",
+        "\u03b8": r"\theta ", "\u221e": r"\infty ", "\u2202": r"\partial ",
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
-    # Tesseract commonly reads superscript digits as ordinary digits after a variable.
-    # Apply only to common single-letter mathematical variables.
-    text = re.sub(r"\b([A-Za-z])\s*([²³])", lambda m: m.group(1) + "^" + ("2" if m.group(2) == "²" else "3"), text)
+    text = text.replace("\u221a", r"\sqrt{}")
+    text = re.sub(
+        r"\b([A-Za-z])\s*([²³])",
+        lambda m: m.group(1) + "^" + ("2" if m.group(2) == "²" else "3"),
+        text,
+    )
     return text
 
 
-def _ocr_image_tesseract(image):
-    """Upscale and enhance a scanned page before the Tesseract fallback."""
-    import pytesseract
-    from PIL import ImageOps, ImageEnhance, ImageFilter
-    image = ImageOps.exif_transpose(image).convert("L")
-    image = ImageOps.autocontrast(image)
-    if image.width < 2200:
-        scale = min(3.0, 2200 / max(1, image.width))
-        image = image.resize((int(image.width * scale), int(image.height * scale)))
-    image = ImageEnhance.Contrast(image).enhance(1.6)
-    image = image.filter(ImageFilter.SHARPEN)
-    return pytesseract.image_to_string(image, config="--oem 3 --psm 6")
-
+def _ocr_image_pix2text(image):
+    """Recognize page text and mathematical formulae, returning Markdown/LaTeX text."""
+    engine = _get_pix2text_engine()
+    res = engine.recognize_page(image)
+    if isinstance(res, str):
+        return res
+    if hasattr(res, "text") and isinstance(res.text, str):
+        return res.text
+    if hasattr(res, "to_markdown"):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            md = res.to_markdown(tmpdir)
+            if isinstance(md, str) and md.strip():
+                return md
+    return str(res)
 
 @st.cache_resource(show_spinner=False)
 def _get_pix2text_engine():
