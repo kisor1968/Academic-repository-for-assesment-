@@ -3605,7 +3605,56 @@ STATUS_LABELS = {"draft": "Draft", "scheduled": "Scheduled", "open": "Open", "cl
 
 def _status(t):
     return "draft" if not t.get("published") else test_status(t, now())
+def _render_paper_preview(store, by_id, chosen_ids, title, instr, dur, open_at, close_at, shuf_q, shuf_o, prefix):
+    """Render a full preview of the selected question paper, including LaTeX expressions."""
+    ordered_ids = sorted(chosen_ids, key=lambda i: natural_key(by_id[i]["number"]))
+    qs = [dict(by_id[i]) for i in ordered_ids if i in by_id]
+    if shuf_q and qs:
+        random.Random(f"{prefix}-q").shuffle(qs)
+    if shuf_o:
+        for q in qs:
+            if q.get("type") == "mcq" and q.get("options"):
+                opts = list(q["options"])
+                random.Random(f"{prefix}-o-{q['id']}").shuffle(opts)
+                q["options"] = opts
 
+    total_marks = sum(float(q["max_marks"]) for q in qs)
+    with st.container(border=True):
+        st.markdown(f"### 📄 {html_escape(title.strip() or tr('Untitled Test'))}")
+        st.caption(
+            f"**{html_escape(INSTITUTION_NAME)}** · {trf('Department of {0}', store.dept)} · "
+            f"{trf('{0} question(s)', len(qs))} · {trf('Total marks: {0:.1f}', total_marks)}"
+        )
+        meta_bits = []
+        if dur:
+            meta_bits.append(trf("Time limit: {0} min", dur))
+        if open_at:
+            meta_bits.append(trf("Opens: {0}", open_at[:16]))
+        if close_at:
+            meta_bits.append(trf("Closes: {0}", close_at[:16]))
+        if meta_bits:
+            st.caption(" · ".join(meta_bits))
+        if shuf_q or shuf_o:
+            st.caption(tr("Preview shows one possible shuffled order (if shuffling is enabled)."))
+        if instr and instr.strip():
+            st.info(instr.strip())
+
+        st.markdown("---")
+        if not qs:
+            st.warning(tr("Select at least one question to preview the question paper."))
+            return
+
+        for q in qs:
+            st.markdown(f"#### Q{html_escape(str(q['number']))}.")
+            st.markdown(q["question"])
+            qtype_label = tr(QUESTION_TYPES.get(q["type"], q["type"]))
+            tag = f" · _{q['identifier']}_" if q.get("identifier") else ""
+            st.caption(trf("{0:.1f} mark(s) · {1}{2}", q["max_marks"], qtype_label, tag))
+            if q["type"] == "mcq" and q.get("options"):
+                for idx, opt in enumerate(q["options"]):
+                    label = chr(65 + idx) if idx < 26 else str(idx + 1)
+                    st.markdown(f"- **({label})** {opt}")
+            st.markdown("<br>", unsafe_allow_html=True)
 
 def _editor(store, prefix, test=None):
     """Draws the test form. Returns the data dict when the teacher presses Save, else None."""
@@ -3647,6 +3696,12 @@ def _editor(store, prefix, test=None):
     shuf_q = s1.checkbox(tr("Shuffle the order of questions"), value=bool(t.get("shuffle_questions")), key=k("sq"))
     shuf_o = s2.checkbox(tr("Shuffle the options of MCQs"), value=bool(t.get("shuffle_options")), key=k("so"))
     published = st.checkbox(tr("Publish (visible to students)"), value=t.get("published", True), key=k("pub"))
+    show_preview = st.checkbox(tr("👁️ Preview full question paper"), value=False, key=k("preview"))
+    if show_preview:
+        _render_paper_preview(
+            store, by_id, chosen, title, instr, int(dur),
+            open_at, close_at, shuf_q, shuf_o, prefix
+        )
     if dur and not store.has_roster():
         st.warning(tr("There is no student roster yet, so a student could restart the timer by refreshing the page. "
                       "Import a class list (👥 Students) to enforce the time limit."))
